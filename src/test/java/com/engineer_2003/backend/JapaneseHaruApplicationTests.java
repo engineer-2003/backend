@@ -1,10 +1,10 @@
-package io.engineer_2003.backend;
+package com.engineer_2003.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class BackendApplicationTests {
+class JapaneseHaruApplicationTests {
 
 	@Test
 	void contextLoads() {
