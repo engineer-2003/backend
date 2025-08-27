@@ -3,9 +3,11 @@ package com.engineer_2003.backend.dto;
 import com.engineer_2003.backend.entity.Word;
 import com.engineer_2003.backend.entity.AdjectiveForm;
 import com.engineer_2003.backend.entity.VerbForm;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
 import java.util.HashMap;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WordDto {
     private Long id;
     private String levelName;
@@ -32,27 +34,42 @@ public class WordDto {
         this.exampleTranslation = word.getExampleTranslation();
         this.forms = new HashMap<>();
 
-        // 형용사 활용형 추가
+        // 형용사 활용형 추가 (null 체크 강화)
         if (word.getAdjectiveForms() != null && !word.getAdjectiveForms().isEmpty()) {
             AdjectiveForm adjForm = word.getAdjectiveForms().iterator().next();
-            forms.put("미연형", adjForm.getMizenForm());
-            forms.put("부정형", adjForm.getNegativeForm());
-            forms.put("て형", adjForm.getTeForm());
-            forms.put("과거형", adjForm.getPastForm());
-            forms.put("가정형", adjForm.getConditionalForm());
-            forms.put("정중형", adjForm.getPoliteForm());
+            if (adjForm != null) {
+                addFormIfNotEmpty("미연형", adjForm.getMizenForm());
+                addFormIfNotEmpty("부정형", adjForm.getNegativeForm());
+                addFormIfNotEmpty("て형", adjForm.getTeForm());
+                addFormIfNotEmpty("과거형", adjForm.getPastForm());
+                addFormIfNotEmpty("가정형", adjForm.getConditionalForm());
+                addFormIfNotEmpty("정중형", adjForm.getPoliteForm());
+            }
         }
 
-
-        // 동사 활용형 추가
+        // 동사 활용형 추가 (null 체크 강화)
         if (word.getVerbForms() != null && !word.getVerbForms().isEmpty()) {
             VerbForm verbForm = word.getVerbForms().iterator().next();
-            forms.put("ます형", verbForm.getMasuForm());
-            forms.put("부정형", verbForm.getNegativeForm());
-            forms.put("청유형", verbForm.getVolitionalForm());
-            forms.put("가정형", verbForm.getConditionalForm());
-            forms.put("명령형", verbForm.getImperativeForm());
-            forms.put("가능형", verbForm.getPotentialForm());
+            if (verbForm != null) {
+                addFormIfNotEmpty("ます형", verbForm.getMasuForm());
+                addFormIfNotEmpty("부정형", verbForm.getNegativeForm());
+                addFormIfNotEmpty("청유형", verbForm.getVolitionalForm());
+                addFormIfNotEmpty("가정형", verbForm.getConditionalForm());
+                addFormIfNotEmpty("명령형", verbForm.getImperativeForm());
+                addFormIfNotEmpty("가능형", verbForm.getPotentialForm());
+                addFormIfNotEmpty("て형", verbForm.getTeForm());
+                addFormIfNotEmpty("た형", verbForm.getTaForm());
+                addFormIfNotEmpty("과거형", verbForm.getPastForm());
+            }
+        }
+    }
+
+    /**
+     * 비어있지 않은 활용형만 추가
+     */
+    private void addFormIfNotEmpty(String key, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            this.forms.put(key, value.trim());
         }
     }
 
@@ -83,4 +100,15 @@ public class WordDto {
 
     public Map<String, String> getForms() { return forms; }
     public void setForms(Map<String, String> forms) { this.forms = forms; }
+
+    @Override
+    public String toString() {
+        return "WordDto{" +
+                "id=" + id +
+                ", word='" + word + '\'' +
+                ", reading='" + reading + '\'' +
+                ", meaning='" + meaning + '\'' +
+                ", forms=" + forms +
+                '}';
+    }
 }

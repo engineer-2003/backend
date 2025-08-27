@@ -31,6 +31,13 @@ public class AdjectiveForm {
     @Column(name = "polite_form")
     private String politeForm;
 
+    // 추가 활용형들
+    @Column(name = "adverbial_form")
+    private String adverbialForm; // 부사형
+
+    @Column(name = "noun_form")
+    private String nounForm; // 명사형
+
     // 기본 생성자
     public AdjectiveForm() {}
 
@@ -58,4 +65,21 @@ public class AdjectiveForm {
 
     public String getPoliteForm() { return politeForm; }
     public void setPoliteForm(String politeForm) { this.politeForm = politeForm; }
+
+    public String getAdverbialForm() { return adverbialForm; }
+    public void setAdverbialForm(String adverbialForm) { this.adverbialForm = adverbialForm; }
+
+    public String getNounForm() { return nounForm; }
+    public void setNounForm(String nounForm) { this.nounForm = nounForm; }
+
+    @Override
+    public String toString() {
+        return "AdjectiveForm{" +
+                "id=" + id +
+                ", negativeForm='" + negativeForm + '\'' +
+                ", teForm='" + teForm + '\'' +
+                ", pastForm='" + pastForm + '\'' +
+                ", politeForm='" + politeForm + '\'' +
+                '}';
+    }
 }

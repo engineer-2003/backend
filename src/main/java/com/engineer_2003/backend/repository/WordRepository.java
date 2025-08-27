@@ -12,9 +12,14 @@ public interface WordRepository extends JpaRepository<Word, Long> {
 
     List<Word> findByLevelNameAndPartOfSpeech(String levelName, String partOfSpeech);
 
-    @Query("SELECT w FROM Word w LEFT JOIN FETCH w.adjectiveForms LEFT JOIN FETCH w.verbForms WHERE w.levelName = :levelName AND w.partOfSpeech = :partOfSpeech ORDER BY w.id")
-    List<Word> findWordsWithFormsbyLevelAndPart(@Param("levelName") String levelName, @Param("partOfSpeech") String partOfSpeech);
+    @Query("SELECT w FROM Word w LEFT JOIN FETCH w.adjectiveForms LEFT JOIN FETCH w.verbForms WHERE w.levelName = :level AND w.partOfSpeech = :part ORDER BY w.id")
+    List<Word> findWordsWithFormsbyLevelAndPart(
+            @Param("level") String level,
+            @Param("part") String part
+    );
 
     @Query("SELECT w FROM Word w LEFT JOIN FETCH w.adjectiveForms LEFT JOIN FETCH w.verbForms WHERE w.id = :id")
-    Word findWordWithFormsById(@Param("id") Long id);
+    Word findWordWithFormsById(
+            @Param("id") Long id
+    );
 }
