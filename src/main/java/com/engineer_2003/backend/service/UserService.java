@@ -17,6 +17,7 @@ public class UserService {
         this.userRepository = userRepository;
     }
 
+    // 회원가입
     @Transactional
     public UserResponseDto registerUser(UserRegistrationDto userDto) {
         if (userRepository.existsByUsername(userDto.getUsername())) {
@@ -25,7 +26,7 @@ public class UserService {
 
         User user = User.builder()
                 .username(userDto.getUsername())
-                .password(userDto.getPassword()) // 실제로는 비밀번호 암호화 필요
+                .password(userDto.getPassword()) // 실제 서비스에서는 반드시 암호화 필요
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -35,5 +36,18 @@ public class UserService {
                 .username(savedUser.getUsername())
                 .createdAt(savedUser.getCreatedAt())
                 .build();
+    }
+
+    // 로그인
+    public UserResponseDto login(String username, String password) {
+        User user = userRepository.findByUsername(username);
+        if (user != null && user.getPassword().equals(password)) {
+            return UserResponseDto.builder()
+                    .userId(user.getUserId())
+                    .username(user.getUsername())
+                    .createdAt(user.getCreatedAt())
+                    .build();
+        }
+        return null;
     }
 }
