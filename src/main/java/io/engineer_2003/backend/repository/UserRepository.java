@@ -1,9 +1,0 @@
-package io.engineer_2003.backend.repository;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-
-import io.engineer_2003.backend.entity.User;
-
-public interface UserRepository extends JpaRepository<User, Long> {
-    boolean existsByUsername(String username);
-}

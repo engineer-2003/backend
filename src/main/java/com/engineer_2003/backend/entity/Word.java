@@ -1,4 +1,4 @@
-package io.engineer_2003.backend.entity;
+package com.engineer_2003.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
