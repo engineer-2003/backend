@@ -18,14 +18,23 @@ public class UserController {
         this.userService = userService;
     }
 
+    // 회원가입
     @PostMapping("/signup")
     public ResponseEntity<UserResponseDto> signup(@RequestBody UserRegistrationDto userDto) {
-        // 수동 검증
         if (!userDto.isValid()) {
             throw new IllegalArgumentException(userDto.getValidationMessage());
         }
-
         UserResponseDto response = userService.registerUser(userDto);
+        return ResponseEntity.ok(response);
+    }
+
+    // 로그인
+    @PostMapping("/login")
+    public ResponseEntity<UserResponseDto> login(@RequestBody UserRegistrationDto loginDto) {
+        UserResponseDto response = userService.login(loginDto.getUsername(), loginDto.getPassword());
+        if (response == null) {
+            return ResponseEntity.status(401).build(); // Unauthorized
+        }
         return ResponseEntity.ok(response);
     }
 }
