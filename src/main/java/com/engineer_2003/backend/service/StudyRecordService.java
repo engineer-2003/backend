@@ -1,11 +1,15 @@
 package com.engineer_2003.backend.service;
 
-import com.engineer_2003.backend.entity.StudyRecord;
-import com.engineer_2003.backend.repository.StudyRecordRepository;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import com.engineer_2003.backend.dto.StudyRecordResponseDto;
+import com.engineer_2003.backend.entity.StudyRecord;
+import com.engineer_2003.backend.repository.StudyRecordRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -19,5 +23,18 @@ public class StudyRecordService {
 
     public List<StudyRecord> getRecordsByUser(Long userId) {
         return studyRecordRepository.findByUserUserId(userId);
+    }
+
+    // ✅ DTO 변환 메소드
+    public List<StudyRecordResponseDto> getRecordsDtoByUser(Long userId) {
+        return studyRecordRepository.findByUserUserId(userId).stream()
+                .map(r -> new StudyRecordResponseDto(
+                        r.getStudyDate(),
+                        r.getLevelName(),
+                        r.getPartOfSpeech(),
+                        r.getWordCount(),
+                        r.getStudyTime()
+                ))
+                .collect(Collectors.toList());
     }
 }

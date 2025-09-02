@@ -1,12 +1,21 @@
 package com.engineer_2003.backend.controller;
 
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.engineer_2003.backend.dto.StudyRecordResponseDto;
 import com.engineer_2003.backend.entity.StudyRecord;
 import com.engineer_2003.backend.service.StudyRecordService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/study-records")
@@ -21,8 +30,9 @@ public class StudyRecordController {
         return ResponseEntity.ok(studyRecordService.saveRecord(record));
     }
 
+    //  DTO 반환
     @GetMapping("/{userId}")
-    public ResponseEntity<List<StudyRecord>> getRecordsByUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(studyRecordService.getRecordsByUser(userId));
+    public ResponseEntity<List<StudyRecordResponseDto>> getRecordsByUser(@PathVariable Long userId) {
+        return ResponseEntity.ok(studyRecordService.getRecordsDtoByUser(userId));
     }
 }
