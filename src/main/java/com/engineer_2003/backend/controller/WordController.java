@@ -3,6 +3,7 @@ package com.engineer_2003.backend.controller;
 import com.engineer_2003.backend.dto.WordDto;
 import com.engineer_2003.backend.service.WordService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
@@ -81,6 +82,72 @@ public class WordController {
         } catch (Exception e) {
             logger.error("단어 조회 중 오류 발생 - ID: {}", id, e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 예문 기반 문제 생성 API
+     */
+    @GetMapping("/{id}/sentence-problem")
+    public ResponseEntity<Map<String, Object>> generateSentenceProblem(@PathVariable Long id) {
+        logger.info("예문 문제 생성 요청 - 단어 ID: {}", id);
+
+        try {
+            if (id == null || id <= 0) {
+                logger.warn("잘못된 단어 ID: {}", id);
+                return ResponseEntity.badRequest().build();
+            }
+
+            Map<String, Object> problem = wordService.generateSentenceProblem(id);
+
+            if (problem == null || problem.isEmpty()) {
+                logger.warn("문제 생성 실패 - 단어 ID: {}", id);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "문제를 생성할 수 없습니다.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            }
+
+            logger.info("예문 문제 생성 성공 - 단어 ID: {}", id);
+            return ResponseEntity.ok(problem);
+
+        } catch (Exception e) {
+            logger.error("예문 문제 생성 중 오류 발생 - 단어 ID: {}", id, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "문제 생성 중 오류가 발생했습니다.");
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
+     * 활용형 문제 생성 API
+     */
+    @GetMapping("/{id}/form-problem")
+    public ResponseEntity<Map<String, Object>> generateFormProblem(@PathVariable Long id) {
+        logger.info("활용형 문제 생성 요청 - 단어 ID: {}", id);
+
+        try {
+            if (id == null || id <= 0) {
+                logger.warn("잘못된 단어 ID: {}", id);
+                return ResponseEntity.badRequest().build();
+            }
+
+            Map<String, Object> problem = wordService.generateFormProblem(id);
+
+            if (problem == null || problem.isEmpty()) {
+                logger.warn("활용형 문제 생성 실패 - 단어 ID: {}", id);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "활용형 문제를 생성할 수 없습니다.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            }
+
+            logger.info("활용형 문제 생성 성공 - 단어 ID: {}", id);
+            return ResponseEntity.ok(problem);
+
+        } catch (Exception e) {
+            logger.error("활용형 문제 생성 중 오류 발생 - 단어 ID: {}", id, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "활용형 문제 생성 중 오류가 발생했습니다.");
+            return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
 
