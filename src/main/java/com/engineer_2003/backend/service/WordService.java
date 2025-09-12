@@ -9,9 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Collections;
 
 @Service
 @Transactional
@@ -89,6 +88,165 @@ public class WordService {
             logger.error("단어 조회 중 오류 발생 - ID: {}", id, e);
             throw new RuntimeException("단어 조회 실패", e);
         }
+    }
+
+    /**
+     * 예문 기반 문제 생성
+     */
+    public Map<String, Object> generateSentenceProblem(Long wordId) {
+        logger.debug("예문 문제 생성 - 단어 ID: {}", wordId);
+
+        try {
+            Word word = wordRepository.findWordWithFormsById(wordId);
+            if (word == null) {
+                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
+                return null;
+            }
+
+            Map<String, Object> problem = new HashMap<>();
+
+            // 기본 정보
+            problem.put("id", word.getId());
+            problem.put("meaning", word.getMeaning());
+            problem.put("exampleTranslation", word.getExampleTranslation());
+            problem.put("level", word.getLevelName());
+            problem.put("part", word.getPartOfSpeech());
+
+            // 예문에서 빈칸 만들기
+            String blankSentence = createBlankSentence(word.getExampleSentence(), word.getWord(), word.getReading());
+            problem.put("blankSentence", blankSentence);
+
+            // 정답은 원형
+            problem.put("correctAnswers", Arrays.asList(word.getWord(), word.getReading()));
+            problem.put("hint", getHint(word.getReading()));
+
+            logger.debug("예문 문제 생성 완료 - 단어 ID: {}", wordId);
+            return problem;
+
+        } catch (Exception e) {
+            logger.error("예문 문제 생성 중 오류 발생 - 단어 ID: {}", wordId, e);
+            return null;
+        }
+    }
+
+    /**
+     * 활용형 문제 생성
+     */
+    public Map<String, Object> generateFormProblem(Long wordId) {
+        logger.debug("활용형 문제 생성 - 단어 ID: {}", wordId);
+
+        try {
+            Word word = wordRepository.findWordWithFormsById(wordId);
+            if (word == null) {
+                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
+                return null;
+            }
+
+            WordDto wordDto = new WordDto(word);
+
+            // 동사나 형용사가 아니면 활용형 문제를 생성할 수 없음
+            if (!"동사".equals(word.getPartOfSpeech()) && !"형용사".equals(word.getPartOfSpeech())) {
+                logger.warn("활용형이 없는 품사 - 단어 ID: {}, 품사: {}", wordId, word.getPartOfSpeech());
+                return null;
+            }
+
+            // 사용 가능한 활용형 목록 가져오기
+            List<String> availableForms = getAvailableForms(wordId);
+            if (availableForms.isEmpty()) {
+                logger.warn("사용 가능한 활용형이 없음 - 단어 ID: {}", wordId);
+                return null;
+            }
+
+            // 랜덤하게 활용형 선택
+            Random random = new Random();
+            String selectedForm = availableForms.get(random.nextInt(availableForms.size()));
+            String correctAnswer = wordDto.getForms().get(selectedForm);
+
+            Map<String, Object> problem = new HashMap<>();
+            problem.put("id", word.getId());
+            problem.put("word", word.getWord());
+            problem.put("reading", word.getReading());
+            problem.put("meaning", word.getMeaning());
+            problem.put("part", word.getPartOfSpeech());
+            problem.put("level", word.getLevelName());
+            problem.put("formType", selectedForm);
+            problem.put("formName", getFormDisplayName(selectedForm));
+            problem.put("correctAnswer", correctAnswer);
+            problem.put("hint", getHint(correctAnswer));
+
+            logger.debug("활용형 문제 생성 완료 - 단어 ID: {}, 활용형: {}", wordId, selectedForm);
+            return problem;
+
+        } catch (Exception e) {
+            logger.error("활용형 문제 생성 중 오류 발생 - 단어 ID: {}", wordId, e);
+            return null;
+        }
+    }
+
+    /**
+     * 활용형의 표시명 반환
+     */
+    private String getFormDisplayName(String formType) {
+        Map<String, String> formNames = new HashMap<>();
+
+        // 동사 활용형
+        formNames.put("masuForm", "ます형");
+        formNames.put("negativeForm", "부정형");
+        formNames.put("volitionalForm", "의지형");
+        formNames.put("conditionalForm", "조건형");
+        formNames.put("imperativeForm", "명령형");
+        formNames.put("potentialForm", "가능형");
+        formNames.put("teForm", "て형");
+        formNames.put("taForm", "た형");
+        formNames.put("pastForm", "과거형");
+        formNames.put("presentForm", "현재형");
+        formNames.put("causativeForm", "사역형");
+        formNames.put("passiveForm", "수동형");
+
+        // 형용사 활용형
+        formNames.put("mizenForm", "미연형");
+        formNames.put("politeForm", "정중형");
+        formNames.put("adverbialForm", "부사형");
+        formNames.put("nounForm", "명사형");
+
+        return formNames.getOrDefault(formType, formType);
+    }
+
+    /**
+     * 예문에서 빈칸 만들기 (백엔드에서 처리)
+     */
+    private String createBlankSentence(String sentence, String word, String reading) {
+        if (sentence == null || sentence.trim().isEmpty()) {
+            return "例文がありません。";
+        }
+
+        String blankSentence = sentence;
+
+        // 한자 형태의 단어를 빈칸으로
+        if (word != null && !word.trim().isEmpty()) {
+            blankSentence = blankSentence.replace(word, "（　）");
+        }
+
+        // 히라가나 읽기도 빈칸으로 (아직 빈칸이 안 된 경우)
+        if (reading != null && !reading.trim().isEmpty() && !blankSentence.contains("（　）")) {
+            blankSentence = blankSentence.replace(reading, "（　）");
+        }
+
+        return blankSentence;
+    }
+
+    /**
+     * 힌트 생성
+     */
+    private String getHint(String answer) {
+        if (answer == null || answer.isEmpty()) {
+            return "";
+        }
+
+        if (answer.length() == 1) {
+            return "힌트: " + answer;
+        }
+        return "힌트: " + answer.charAt(0) + "...";
     }
 
     public boolean checkAnswer(Long wordId, String answer, String formType) {
