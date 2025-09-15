@@ -45,4 +45,18 @@ public class UserService {
         }
         return null;
     }
+
+    // 사용자명으로 사용자 조회
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username);
+    }
+
+    // 사용자명으로 사용자 ID 조회
+    public Long getUserIdByUsername(String username) {
+        User user = userRepository.findByUsername(username);
+        if (user == null) {
+            throw new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username);
+        }
+        return user.getUserId(); // User 엔티티의 ID getter 메서드
+    }
 }
