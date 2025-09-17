@@ -173,7 +173,8 @@ public class WordController {
     @PostMapping("/{id}/check")
     public ResponseEntity<Map<String, Object>> checkAnswer(
             @PathVariable Long id,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
         logger.info("정답 확인 요청 - 단어 ID: {}", id);
 
@@ -188,6 +189,7 @@ public class WordController {
 
             String answer = request.get("answer");
             String formType = request.get("formType"); // 활용형
+            String studyType = request.get("studyType"); // "sentence" 또는 "conjugation"
 
             if (answer == null || answer.trim().isEmpty()) {
                 logger.warn("답안이 제공되지 않음");
@@ -224,6 +226,31 @@ public class WordController {
                 correctAnswer = wordService.getCorrectAnswer(id, formType);
                 isCorrect = wordService.checkAnswer(id, answer.trim(), formType);
                 logger.info("활용형 체크 - 단어 ID: {}, 활용형: {}, 답안: {}", id, formType, answer);
+            }
+
+            // 로그인한 사용자인 경우 학습 결과 저장
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                try {
+                    Long userId = extractUserIdFromToken(authHeader);
+                    WordStudyResult.StudyType type;
+
+                    // studyType 결정 (우선순위: 요청 파라미터 > formType 기반 추론)
+                    if (studyType != null && !studyType.trim().isEmpty()) {
+                        type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
+                    } else if (formType != null && !formType.trim().isEmpty() && word.getForms().containsKey(formType)) {
+                        type = WordStudyResult.StudyType.CONJUGATION;
+                    } else {
+                        type = WordStudyResult.StudyType.SENTENCE;
+                    }
+
+                    // 학습 결과 저장
+                    studyRecordService.recordWordResult(userId, id, isCorrect, type);
+                    logger.info("학습 결과 저장 완료 - 사용자 ID: {}, 단어 ID: {}, 정답 여부: {}, 타입: {}",
+                            userId, id, isCorrect, type);
+                } catch (Exception e) {
+                    logger.warn("학습 결과 저장 실패 - 단어 ID: {}", id, e);
+                    // 학습 결과 저장 실패해도 정답 확인은 계속 진행
+                }
             }
 
             Map<String, Object> response = new HashMap<>();
@@ -301,20 +328,74 @@ public class WordController {
             @RequestParam String studyType,
             @RequestHeader("Authorization") String authHeader) {
 
-        try {
-            Long userId = extractUserIdFromToken(authHeader);
-            WordStudyResult.StudyType type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
+        logger.info("틀린 단어 개수 조회 요청 - 레벨: {}, 품사: {}, 타입: {}", level, part, studyType);
 
-            Long count = studyRecordService.getIncorrectWordCount(userId, level, part, type);
+        try {
+            // 입력값 검증
+            if (level == null || level.trim().isEmpty()) {
+                logger.warn("레벨이 제공되지 않음");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "레벨을 입력해주세요.");
+                errorResponse.put("count", 0);
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            if (part == null || part.trim().isEmpty()) {
+                logger.warn("품사가 제공되지 않음");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "품사를 입력해주세요.");
+                errorResponse.put("count", 0);
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            if (studyType == null || studyType.trim().isEmpty()) {
+                logger.warn("학습 타입이 제공되지 않음");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "학습 타입을 입력해주세요.");
+                errorResponse.put("count", 0);
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // JWT 토큰에서 사용자 ID 추출
+            Long userId;
+            try {
+                userId = extractUserIdFromToken(authHeader);
+                logger.info("사용자 ID 추출 성공: {}", userId);
+            } catch (Exception tokenError) {
+                logger.error("JWT 토큰 처리 중 오류 발생", tokenError);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "인증에 실패했습니다.");
+                errorResponse.put("count", 0);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+            }
+
+            // StudyType enum 변환
+            WordStudyResult.StudyType type;
+            try {
+                type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                logger.warn("지원하지 않는 학습 타입: {}", studyType);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "지원하지 않는 학습 타입입니다.");
+                errorResponse.put("count", 0);
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // 틀린 단어 개수 조회
+            Long count = studyRecordService.getIncorrectWordCount(userId, level.trim(), part.trim(), type);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("count", count);
+            response.put("count", count != null ? count : 0);
 
+            logger.info("틀린 단어 개수 조회 성공 - 사용자: {}, 개수: {}", userId, count);
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("틀린 단어 개수 조회 중 오류 발생", e);
-            return ResponseEntity.internalServerError().build();
+            logger.error("틀린 단어 개수 조회 중 예외 발생 - 레벨: {}, 품사: {}, 타입: {}", level, part, studyType, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "서버 오류가 발생했습니다.");
+            errorResponse.put("count", 0);
+            return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
 
