@@ -33,9 +33,9 @@ public class SecurityConfig {
                         // 아래 엔드포인트는 인증 없이 접근을 허용합니다.
                         .requestMatchers(
                             "/api/users/signup", 
-                            "/api/users/login", 
+                            "/api/users/login",
                             "/api/users/find-password",
-                            "/api/users/reset-password" 
+                            "/api/users/reset-password"
                         ).permitAll()
 
                         // 인증 없이 접근 가능한 학습 API (단어 조회, 문제 생성 등)
