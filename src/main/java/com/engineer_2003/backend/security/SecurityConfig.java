@@ -30,9 +30,14 @@ public class SecurityConfig {
                 .cors(cors -> {})
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 인증 없이 접근 가능한 엔드포인트
-                        .requestMatchers("/api/users/signup", "/api/users/login").permitAll()
-
+                        // 인증 없이 접근을 허용하는 엔드포인트
+                        .requestMatchers(
+                            "/api/users/signup", 
+                            "/api/users/login",
+                            "/api/users/find-password",
+                            "/api/users/reset-password"
+                        ).permitAll()
+                        
                         // 인증 없이 접근 가능한 학습 API (단어 조회, 문제 생성 등)
                         .requestMatchers("/study", "/study/{id}", "/study/{id}/sentence-problem", "/study/{id}/form-problem", "/study/{id}/check").permitAll()
 
