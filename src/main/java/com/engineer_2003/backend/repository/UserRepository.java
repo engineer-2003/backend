@@ -1,3 +1,5 @@
+// src/main/java/.../repository/UserRepository.java
+
 package com.engineer_2003.backend.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -9,4 +11,6 @@ import com.engineer_2003.backend.entity.User;
 public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsername(String username);
     User findByUsername(String username);
+    User findByUsernameAndEmail(String username, String email);
+    User findByResetToken(String resetToken); 
 }

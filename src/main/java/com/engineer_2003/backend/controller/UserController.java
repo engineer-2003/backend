@@ -8,11 +8,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.engineer_2003.backend.dto.UserRegistrationDto;
+import com.engineer_2003.backend.dto.PasswordResetDto; // DTO 임포트
 import com.engineer_2003.backend.service.UserService;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"})
 public class UserController {
 
     private final UserService userService;
@@ -36,8 +37,22 @@ public class UserController {
     public ResponseEntity<String> login(@RequestBody UserRegistrationDto loginDto) {
         String token = userService.login(loginDto.getUsername(), loginDto.getPassword());
         if (token == null) {
-            return ResponseEntity.status(401).body("로그인 실패"); // Unauthorized
+            return ResponseEntity.status(401).body("로그인 실패");
         }
         return ResponseEntity.ok(token);
+    }
+    
+    // 비밀번호 찾기
+    @PostMapping("/find-password")
+    public ResponseEntity<Void> findPassword(@RequestBody UserRegistrationDto userDto) {
+        userService.findPassword(userDto.getUsername(), userDto.getEmail());
+        return ResponseEntity.ok().build();
+    }
+    
+    // 비밀번호 재설정
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@RequestBody PasswordResetDto resetDto) {
+        userService.resetPassword(resetDto.getToken(), resetDto.getNewPassword());
+        return ResponseEntity.ok().build();
     }
 }
