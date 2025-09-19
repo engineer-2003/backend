@@ -8,12 +8,13 @@ import lombok.Setter;
 public class UserRegistrationDto {
     private String username;
     private String password;
+    private String email; // 이메일 필드 추가
 
-    // 간단한 검증 메서드
     public boolean isValid() {
         return username != null && !username.trim().isEmpty()
                 && username.length() >= 3 && username.length() <= 50
-                && password != null && password.length() >= 6;
+                && password != null && password.length() >= 6
+                && email != null && email.contains("@");
     }
 
     public String getValidationMessage() {
@@ -25,6 +26,9 @@ public class UserRegistrationDto {
         }
         if (password == null || password.length() < 6) {
             return "비밀번호는 최소 6자 이상이어야 합니다.";
+        }
+        if (email == null || !email.contains("@")) {
+            return "유효한 이메일 주소를 입력해주세요.";
         }
         return null;
     }

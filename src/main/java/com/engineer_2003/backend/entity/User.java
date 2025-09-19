@@ -33,11 +33,21 @@ public class User {
 
     @Column(nullable = false, length = 255)
     private String password;
+    
+    @Column(nullable = false, unique = true)
+    private String email;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    private String resetToken; // 비밀번호 재설정 토큰 필드 추가
+
+    // 수동으로 getter 메서드 추가 (Lombok 오류 방지)
+    public Long getUserId() {
+        return this.userId;
+    }
 
     @PrePersist
     protected void onCreate() {
