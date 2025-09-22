@@ -141,8 +141,10 @@ public class WordController {
      * 활용형 문제 생성 API
      */
     @GetMapping("/{id}/form-problem")
-    public ResponseEntity<Map<String, Object>> generateFormProblem(@PathVariable Long id) {
-        logger.info("활용형 문제 생성 요청 - 단어 ID: {}", id);
+    public ResponseEntity<Map<String, Object>> generateFormProblem(
+            @PathVariable Long id,
+            @RequestParam(required = false) String formType) {
+        logger.info("활용형 문제 생성 요청 - 단어 ID: {}, 활용형: {}", id, formType);
 
         try {
             if (id == null || id <= 0) {
@@ -436,14 +438,32 @@ public class WordController {
     public ResponseEntity<Map<String, Object>> endStudySession(
             @PathVariable Long sessionId,
             @RequestBody Map<String, Object> request,
-            @RequestHeader("Authorization") String authHeader) {
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestParam(value = "authToken", required = false) String authToken) {
 
         logger.info("학습 세션 종료 요청 - 세션 ID: {}", sessionId);
 
         try {
-            Long userId = extractUserIdFromToken(authHeader);
+            Long userId;
 
-            // 세션 ID 검증
+            // Authorization 헤더 또는 URL 파라미터에서 토큰 추출 (Beacon API 지원)
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                userId = extractUserIdFromToken(authHeader);
+                logger.debug("Authorization 헤더에서 사용자 ID 추출: {}", userId);
+            } else if (authToken != null && !authToken.isEmpty()) {
+                if (!jwtTokenProvider.validateToken(authToken)) {
+                    throw new IllegalArgumentException("유효하지 않은 JWT 토큰입니다.");
+                }
+                String username = getUsernameFromToken(authToken);
+                userId = getUserIdByUsername(username);
+                logger.debug("URL 파라미터에서 사용자 ID 추출: {}", userId);
+            } else {
+                logger.warn("인증 정보가 없음");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "인증 정보가 필요합니다.");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+            }
+
             if (sessionId == null || sessionId <= 0) {
                 logger.warn("잘못된 세션 ID: {}", sessionId);
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -451,25 +471,40 @@ public class WordController {
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
-            // 학습 결과 데이터 추출
             Integer correctCount = (Integer) request.getOrDefault("correctCount", 0);
             Integer incorrectCount = (Integer) request.getOrDefault("incorrectCount", 0);
             Integer totalCount = (Integer) request.getOrDefault("totalCount", 0);
 
-            // StudyRecordService의 endStudySession 메서드 호출 (3개 매개변수)
+            logger.info("학습 결과: 정답={}, 오답={}, 총 문제={}", correctCount, incorrectCount, totalCount);
+
             studyRecordService.endStudySession(sessionId, totalCount, correctCount);
 
             // 개별 단어 결과 처리 (선택사항)
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> studyResults = (List<Map<String, Object>>) request.get("studyResults");
-            if (studyResults != null) {
-                for (Map<String, Object> result : studyResults) {
-                    Long wordId = Long.valueOf(result.get("wordId").toString());
-                    Boolean isCorrect = (Boolean) result.get("isCorrect");
-                    String studyTypeStr = (String) result.get("studyType");
+            if (studyResults != null && !studyResults.isEmpty()) {
+                logger.info("개별 학습 결과 처리: {} 항목", studyResults.size());
 
-                    WordStudyResult.StudyType studyType = WordStudyResult.StudyType.valueOf(studyTypeStr.toUpperCase());
-                    studyRecordService.recordWordResult(userId, wordId, isCorrect, studyType);
+                for (Map<String, Object> result : studyResults) {
+                    try {
+                        Long wordId = Long.valueOf(result.get("wordId").toString());
+                        Boolean isCorrect = (Boolean) result.get("isCorrect");
+                        String studyTypeStr = (String) result.getOrDefault("studyType", "SENTENCE");
+
+                        WordStudyResult.StudyType studyType;
+                        try {
+                            studyType = WordStudyResult.StudyType.valueOf(studyTypeStr.toUpperCase());
+                        } catch (IllegalArgumentException e) {
+                            logger.warn("지원하지 않는 studyType: {}. 기본값 SENTENCE 사용", studyTypeStr);
+                            studyType = WordStudyResult.StudyType.SENTENCE;
+                        }
+
+                        studyRecordService.recordWordResult(userId, wordId, isCorrect, studyType);
+                        logger.debug("단어 결과 저장: wordId={}, isCorrect={}, studyType={}", wordId, isCorrect, studyType);
+
+                    } catch (Exception wordResultError) {
+                        logger.warn("개별 단어 결과 저장 실패: {}", result, wordResultError);
+                    }
                 }
             }
 
@@ -478,7 +513,7 @@ public class WordController {
             response.put("correctCount", correctCount);
             response.put("incorrectCount", incorrectCount);
             response.put("totalCount", totalCount);
-            response.put("accuracy", totalCount > 0 ? (double) correctCount / totalCount * 100 : 0.0);
+            response.put("accuracy", totalCount > 0 ? Math.round((double) correctCount / totalCount * 100 * 100.0) / 100.0 : 0.0);
             response.put("message", "학습 세션이 완료되었습니다.");
 
             logger.info("학습 세션 종료 성공 - 세션 ID: {}, 정답: {}, 오답: {}, 총 문제: {}",
@@ -486,10 +521,59 @@ public class WordController {
 
             return ResponseEntity.ok(response);
 
+        } catch (IllegalArgumentException e) {
+            logger.error("학습 세션 종료 중 인증 오류 - 세션 ID: {}", sessionId, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "인증 실패: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         } catch (Exception e) {
             logger.error("학습 세션 종료 중 오류 발생 - 세션 ID: {}", sessionId, e);
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", "학습 세션 종료 중 오류가 발생했습니다.");
+            errorResponse.put("error", "학습 세션 종료 중 오류가 발생했습니다: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
+     * 학습 세션 강제 종료 (뒤로가기 버튼용)
+     */
+    @PostMapping("/session/{sessionId}/close")
+    public ResponseEntity<Map<String, Object>> closeStudySession(
+            @PathVariable Long sessionId,
+            @RequestHeader("Authorization") String authHeader) {
+
+        logger.info("학습 세션 강제 종료 요청 - 세션 ID: {}", sessionId);
+
+        try {
+            Long userId = extractUserIdFromToken(authHeader);
+
+            if (sessionId == null || sessionId <= 0) {
+                logger.warn("잘못된 세션 ID: {}", sessionId);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "잘못된 세션 ID입니다.");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // 세션을 강제로 종료하고 현재까지의 학습 시간을 기록
+            studyRecordService.endStudySessionById(sessionId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("sessionId", sessionId);
+            response.put("message", "학습 세션이 강제 종료되었습니다.");
+
+            logger.info("학습 세션 강제 종료 완료 - 세션 ID: {}", sessionId);
+
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            logger.error("학습 세션 강제 종료 중 인증 오류 - 세션 ID: {}", sessionId, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "인증 실패: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+        } catch (Exception e) {
+            logger.error("학습 세션 강제 종료 중 오류 발생 - 세션 ID: {}", sessionId, e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "학습 세션 강제 종료 중 오류가 발생했습니다: " + e.getMessage());
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
@@ -507,7 +591,6 @@ public class WordController {
 
         try {
             Long userId = extractUserIdFromToken(authHeader);
-            // StudyRecordService의 getStudyRecords는 userId만 받습니다
             List<StudyRecordDto> records = studyRecordService.getStudyRecords(userId);
 
             logger.info("학습 기록 조회 성공 - 사용자 ID: {}, 기록 개수: {}", userId, records.size());
@@ -537,7 +620,6 @@ public class WordController {
 
             WordStudyResult.StudyType type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
 
-            // StudyRecordService의 recordWordResult 메서드 사용
             studyRecordService.recordWordResult(userId, wordId, isCorrect, type);
 
             Map<String, Object> response = new HashMap<>();
@@ -576,8 +658,6 @@ public class WordController {
      */
     private String getUsernameFromToken(String token) {
         try {
-            // JwtTokenProvider의 getAuthentication을 통해 사용자명을 추출하는 방법
-            // 또는 직접 토큰을 파싱하는 방법을 사용
             Authentication auth = jwtTokenProvider.getAuthentication(token);
             return auth.getName();
         } catch (Exception e) {

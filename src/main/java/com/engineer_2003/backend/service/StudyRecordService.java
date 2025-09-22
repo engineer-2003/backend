@@ -64,31 +64,108 @@ public class StudyRecordService {
     /**
      * 학습 세션 종료 및 기록 저장
      */
+    @Transactional
     public void endStudySession(Long sessionId, int totalQuestions, int correctAnswers) {
         logger.info("학습 세션 종료 - 세션 ID: {}, 총 문제: {}, 정답: {}", sessionId, totalQuestions, correctAnswers);
 
         Optional<StudySession> sessionOpt = studySessionRepository.findById(sessionId);
         if (sessionOpt.isEmpty()) {
             logger.warn("세션을 찾을 수 없음 - 세션 ID: {}", sessionId);
+            throw new IllegalArgumentException("세션을 찾을 수 없습니다: " + sessionId);
+        }
+
+        StudySession session = sessionOpt.get();
+
+        // end_time이 이미 설정되어 있으면 중복 처리 방지
+        if (session.getEndTime() != null) {
+            logger.warn("이미 종료된 세션 - 세션 ID: {}, 기존 종료 시간: {}", sessionId, session.getEndTime());
+            return;
+        }
+
+        // 현재 시간으로 종료 시간 설정
+        LocalDateTime endTime = LocalDateTime.now();
+        session.setEndTime(endTime);
+        session.setTotalQuestions(totalQuestions);
+        session.setCorrectAnswers(correctAnswers);
+
+        // 세션 저장
+        StudySession savedSession = studySessionRepository.save(session);
+        logger.info("세션 종료 시간 설정 완료 - 세션 ID: {}, 종료 시간: {}", sessionId, endTime);
+
+        // 학습 시간 계산 (초 단위)
+        long studyTimeSeconds = java.time.Duration.between(session.getStartTime(), endTime).getSeconds();
+        if (studyTimeSeconds < 1) {
+            studyTimeSeconds = 1; // 최소 1초
+        }
+
+        logger.info("학습 시간 계산 - 세션 ID: {}, 시작: {}, 종료: {}, 소요시간: {}초",
+                sessionId, session.getStartTime(), endTime, studyTimeSeconds);
+
+        // StudyRecord에 저장
+        try {
+            saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
+                    totalQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
+            logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초", session.getUserId(), studyTimeSeconds);
+        } catch (Exception e) {
+            logger.error("StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
+            // StudyRecord 저장 실패해도 세션 종료는 완료된 상태로 유지
+        }
+    }
+
+    /**
+     * 세션 ID로 세션 종료 (뒤로가기 버튼용)
+     */
+    @Transactional
+    public void endStudySessionById(Long sessionId) {
+        logger.info("세션 강제 종료 요청 - 세션 ID: {}", sessionId);
+
+        Optional<StudySession> sessionOpt = studySessionRepository.findById(sessionId);
+        if (sessionOpt.isEmpty()) {
+            logger.warn("종료할 세션을 찾을 수 없음 - 세션 ID: {}", sessionId);
             return;
         }
 
         StudySession session = sessionOpt.get();
-        session.setEndTime(LocalDateTime.now());
-        session.setTotalQuestions(totalQuestions);
-        session.setCorrectAnswers(correctAnswers);
 
-        // 학습 시간 계산 (분 단위)
-        long studyTimeMinutes = java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
-        if (studyTimeMinutes < 1) {
-            studyTimeMinutes = 1; // 최소 1분
+        // 이미 종료된 세션은 처리하지 않음
+        if (session.getEndTime() != null) {
+            logger.info("이미 종료된 세션 - 세션 ID: {}", sessionId);
+            return;
+        }
+
+        // 현재까지의 학습 시간을 기록하고 세션 종료
+        LocalDateTime endTime = LocalDateTime.now();
+        session.setEndTime(endTime);
+
+        // 총 문제 수와 정답 수가 설정되지 않은 경우 기본값 설정
+        if (session.getTotalQuestions() == null) {
+            session.setTotalQuestions(0);
+        }
+        if (session.getCorrectAnswers() == null) {
+            session.setCorrectAnswers(0);
         }
 
         studySessionRepository.save(session);
 
-        // StudyRecord에 저장
-        saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                totalQuestions, (int) studyTimeMinutes, convertStudyType(session.getStudyType()));
+        // 학습 시간 계산 (초 단위)
+        long studyTimeSeconds = java.time.Duration.between(session.getStartTime(), endTime).getSeconds();
+        if (studyTimeSeconds < 1) {
+            studyTimeSeconds = 1; // 최소 1초
+        }
+
+        logger.info("세션 강제 종료 완료 - 세션 ID: {}, 학습 시간: {}초", sessionId, studyTimeSeconds);
+
+        // 학습 시간이 있으면 StudyRecord에 저장
+        if (studyTimeSeconds > 0) {
+            try {
+                saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
+                        session.getTotalQuestions(), (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
+                logger.info("강제 종료 시 StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초",
+                        session.getUserId(), studyTimeSeconds);
+            } catch (Exception e) {
+                logger.error("강제 종료 시 StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
+            }
+        }
     }
 
     /**
@@ -124,10 +201,10 @@ public class StudyRecordService {
     }
 
     /**
-     * 학습 기록 저장
+     * 학습 기록 저장 (초 단위)
      */
     private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
-                                 int wordCount, int studyTime, StudyRecord.StudyType studyType) {
+                                 int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType) {
         LocalDate today = LocalDate.now();
 
         // 오늘 같은 조건의 기록이 있는지 확인
@@ -143,8 +220,10 @@ public class StudyRecordService {
             // 기존 기록에 누적
             StudyRecord record = existingRecord.get();
             record.setWordCount(record.getWordCount() + wordCount);
-            record.setStudyTime(record.getStudyTime() + studyTime);
+            record.setStudyTime(record.getStudyTime() + studyTimeSeconds); // 초 단위로 누적
             studyRecordRepository.save(record);
+            logger.info("기존 학습 기록 업데이트 - 사용자: {}, 추가 시간: {}초, 총 시간: {}초",
+                    userId, studyTimeSeconds, record.getStudyTime());
         } else {
             // 새로운 기록 생성
             StudyRecord newRecord = StudyRecord.builder()
@@ -152,11 +231,12 @@ public class StudyRecordService {
                     .levelName(levelName)
                     .partOfSpeech(partOfSpeech)
                     .wordCount(wordCount)
-                    .studyTime(studyTime)
+                    .studyTime(studyTimeSeconds) // 초 단위로 저장
                     .studyDate(today)
                     .studyType(studyType)
                     .build();
             studyRecordRepository.save(newRecord);
+            logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초", userId, studyTimeSeconds);
         }
     }
 
@@ -200,13 +280,25 @@ public class StudyRecordService {
                 userId, levelName, partOfSpeech, studyType);
     }
 
+    /**
+     * 총 학습 시간 조회 (초 단위)
+     */
+    public Integer getTotalStudyTimeInSeconds(Long userId, LocalDate startDate, LocalDate endDate) {
+        Integer totalTime = studyRecordRepository.getTotalStudyTimeByUserIdAndDateRange(userId, startDate, endDate);
+        return totalTime != null ? totalTime : 0;
+    }
+
+    /**
+     * StudyRecord를 DTO로 변환
+     */
     private StudyRecordDto convertToDto(StudyRecord record) {
         return StudyRecordDto.builder()
                 .studyDate(record.getStudyDate().toString())
                 .levelName(record.getLevelName())
                 .partOfSpeech(record.getPartOfSpeech())
                 .wordCount(record.getWordCount())
-                .studyTime(record.getStudyTime())
+                .studyTime(record.getStudyTime()) // 초 단위
+                .studyDuration(record.getFormattedStudyTime()) // 포맷팅된 시간 문자열
                 .build();
     }
 
