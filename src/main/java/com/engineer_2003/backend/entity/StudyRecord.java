@@ -32,7 +32,7 @@ public class StudyRecord {
     private Integer wordCount = 0;
 
     @Column(name = "study_time", nullable = false)
-    private Integer studyTime = 0; // 분 단위
+    private Integer studyTime = 0; // 초 단위로 변경
 
     @Column(name = "study_date", nullable = false)
     private LocalDate studyDate;
@@ -46,5 +46,32 @@ public class StudyRecord {
 
     public enum StudyType {
         SENTENCE, CONJUGATION
+    }
+
+    /**
+     * 학습 시간을 포맷팅된 문자열로 반환
+     * @return "1시간 30분 45초" 형태의 문자열
+     */
+    public String getFormattedStudyTime() {
+        if (studyTime == null || studyTime == 0) {
+            return "0초";
+        }
+
+        int hours = studyTime / 3600;
+        int minutes = (studyTime % 3600) / 60;
+        int seconds = studyTime % 60;
+
+        StringBuilder sb = new StringBuilder();
+        if (hours > 0) {
+            sb.append(hours).append("시간 ");
+        }
+        if (minutes > 0) {
+            sb.append(minutes).append("분 ");
+        }
+        if (seconds > 0 || sb.length() == 0) {
+            sb.append(seconds).append("초");
+        }
+
+        return sb.toString().trim();
     }
 }

@@ -23,9 +23,36 @@ public interface StudyRecordRepository extends JpaRepository<StudyRecord, Long> 
             @Param("endDate") LocalDate endDate
     );
 
+    /**
+     * 특정 기간 동안의 총 학습 시간 조회 (초 단위)
+     */
     @Query("SELECT COALESCE(SUM(sr.studyTime), 0) FROM StudyRecord sr " +
             "WHERE sr.userId = :userId AND sr.studyDate BETWEEN :startDate AND :endDate")
     Integer getTotalStudyTimeByUserIdAndDateRange(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * 특정 날짜의 학습 시간 조회 (초 단위)
+     */
+    @Query("SELECT COALESCE(SUM(sr.studyTime), 0) FROM StudyRecord sr " +
+            "WHERE sr.userId = :userId AND sr.studyDate = :studyDate")
+    Integer getStudyTimeByUserIdAndDate(
+            @Param("userId") Long userId,
+            @Param("studyDate") LocalDate studyDate
+    );
+
+    /**
+     * 최근 N일간의 일별 학습 시간 조회 (초 단위)
+     */
+    @Query("SELECT sr.studyDate, COALESCE(SUM(sr.studyTime), 0) as totalTime " +
+            "FROM StudyRecord sr " +
+            "WHERE sr.userId = :userId AND sr.studyDate BETWEEN :startDate AND :endDate " +
+            "GROUP BY sr.studyDate " +
+            "ORDER BY sr.studyDate DESC")
+    List<Object[]> getDailyStudyTimeByUserIdAndDateRange(
             @Param("userId") Long userId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
