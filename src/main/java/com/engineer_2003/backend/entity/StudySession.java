@@ -46,7 +46,29 @@ public class StudySession {
     @Column(name = "is_retry_session")
     private Boolean isRetrySession = false;
 
+    // 실시간 정답/오답 카운트 추가
+    @Column(name = "current_correct_count")
+    private Integer currentCorrectCount = 0;
+
+    @Column(name = "current_incorrect_count")
+    private Integer currentIncorrectCount = 0;
+
     public enum StudyType {
         SENTENCE, CONJUGATION
+    }
+
+    // 정답 카운트 증가
+    public void incrementCorrectCount() {
+        this.currentCorrectCount++;
+    }
+
+    // 오답 카운트 증가
+    public void incrementIncorrectCount() {
+        this.currentIncorrectCount++;
+    }
+
+    // 총 문제 수 계산
+    public int getTotalCurrentQuestions() {
+        return this.currentCorrectCount + this.currentIncorrectCount;
     }
 }

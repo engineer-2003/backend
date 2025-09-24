@@ -16,8 +16,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
 
 import java.util.Collections;
 import java.util.List;
@@ -190,8 +188,9 @@ public class WordController {
             }
 
             String answer = request.get("answer");
-            String formType = request.get("formType"); // 활용형
-            String studyType = request.get("studyType"); // "sentence" 또는 "conjugation"
+            String formType = request.get("formType");
+            String studyType = request.get("studyType");
+            String sessionId = request.get("sessionId"); // 세션 ID 추가
 
             if (answer == null || answer.trim().isEmpty()) {
                 logger.warn("답안이 제공되지 않음");
@@ -209,25 +208,32 @@ public class WordController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
 
-            // 활용형이 없거나 formType이 빈 문자열이면 단어 자체를 정답으로 체크
+            // 정답 확인 로직
             boolean isCorrect;
             String correctAnswer;
 
             if (formType == null || formType.trim().isEmpty() || !word.getForms().containsKey(formType)) {
                 correctAnswer = word.getWord();
-                String reading = word.getReading(); // 요미가나
+                String reading = word.getReading();
                 String trimmedAnswer = answer.trim();
-
-                // 정답은 단어 자체 또는 reading과 같으면 정답 처리
                 isCorrect = correctAnswer.equals(trimmedAnswer) || (reading != null && reading.equals(trimmedAnswer));
-
                 logger.info("활용형 없음, 단어/reading 체크 - 단어 ID: {}, 답안: {}", id, answer);
             } else {
-                // 활용형 체크
                 formType = formType.trim();
                 correctAnswer = wordService.getCorrectAnswer(id, formType);
                 isCorrect = wordService.checkAnswer(id, answer.trim(), formType);
                 logger.info("활용형 체크 - 단어 ID: {}, 활용형: {}, 답안: {}", id, formType, answer);
+            }
+
+            // 세션 ID가 있으면 정답/오답 카운트 증가
+            if (sessionId != null && !sessionId.trim().isEmpty()) {
+                try {
+                    Long sessId = Long.valueOf(sessionId);
+                    studyRecordService.updateSessionCount(sessId, isCorrect);
+                    logger.info("세션 카운트 업데이트 - 세션 ID: {}, 정답 여부: {}", sessId, isCorrect);
+                } catch (Exception countError) {
+                    logger.warn("세션 카운트 업데이트 실패 - 세션 ID: {}", sessionId, countError);
+                }
             }
 
             // 로그인한 사용자인 경우 학습 결과 저장
@@ -236,7 +242,6 @@ public class WordController {
                     Long userId = extractUserIdFromToken(authHeader);
                     WordStudyResult.StudyType type;
 
-                    // studyType 결정 (우선순위: 요청 파라미터 > formType 기반 추론)
                     if (studyType != null && !studyType.trim().isEmpty()) {
                         type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
                     } else if (formType != null && !formType.trim().isEmpty() && word.getForms().containsKey(formType)) {
@@ -245,13 +250,11 @@ public class WordController {
                         type = WordStudyResult.StudyType.SENTENCE;
                     }
 
-                    // 학습 결과 저장
                     studyRecordService.recordWordResult(userId, id, isCorrect, type);
                     logger.info("학습 결과 저장 완료 - 사용자 ID: {}, 단어 ID: {}, 정답 여부: {}, 타입: {}",
                             userId, id, isCorrect, type);
                 } catch (Exception e) {
                     logger.warn("학습 결과 저장 실패 - 단어 ID: {}", id, e);
-                    // 학습 결과 저장 실패해도 정답 확인은 계속 진행
                 }
             }
 
