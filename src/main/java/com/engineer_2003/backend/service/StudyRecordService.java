@@ -56,13 +56,38 @@ public class StudyRecordService {
                 .studyType(studyType)
                 .isRetrySession(isRetrySession)
                 .startTime(LocalDateTime.now())
+                .currentCorrectCount(0)
+                .currentIncorrectCount(0)
                 .build();
 
         return studySessionRepository.save(session);
     }
 
     /**
-     * 학습 세션 종료 및 기록 저장
+     * 세션의 정답/오답 카운트 업데이트
+     */
+    @Transactional
+    public void updateSessionCount(Long sessionId, boolean isCorrect) {
+        Optional<StudySession> sessionOpt = studySessionRepository.findById(sessionId);
+        if (sessionOpt.isEmpty()) {
+            logger.warn("세션을 찾을 수 없음 - 세션 ID: {}", sessionId);
+            return;
+        }
+
+        StudySession session = sessionOpt.get();
+        if (isCorrect) {
+            session.incrementCorrectCount();
+        } else {
+            session.incrementIncorrectCount();
+        }
+
+        studySessionRepository.save(session);
+        logger.debug("세션 카운트 업데이트 - 세션 ID: {}, 정답: {}, 오답: {}",
+                sessionId, session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
+    }
+
+    /**
+     * 학습 세션 종료 및 기록 저장 (완료 시)
      */
     @Transactional
     public void endStudySession(Long sessionId, int totalQuestions, int correctAnswers) {
@@ -89,7 +114,7 @@ public class StudyRecordService {
         session.setCorrectAnswers(correctAnswers);
 
         // 세션 저장
-        StudySession savedSession = studySessionRepository.save(session);
+        studySessionRepository.save(session);
         logger.info("세션 종료 시간 설정 완료 - 세션 ID: {}, 종료 시간: {}", sessionId, endTime);
 
         // 학습 시간 계산 (초 단위)
@@ -101,19 +126,24 @@ public class StudyRecordService {
         logger.info("학습 시간 계산 - 세션 ID: {}, 시작: {}, 종료: {}, 소요시간: {}초",
                 sessionId, session.getStartTime(), endTime, studyTimeSeconds);
 
-        // StudyRecord에 저장
+        // StudyRecord에 실시간 카운트를 기반으로 저장
         try {
-            saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                    totalQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
-            logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초", session.getUserId(), studyTimeSeconds);
+            int actualQuestions = session.getTotalCurrentQuestions();
+            if (actualQuestions > 0) {
+                saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
+                        actualQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()),
+                        session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
+                logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
+                        session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
+                        session.getCurrentIncorrectCount());
+            }
         } catch (Exception e) {
             logger.error("StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
-            // StudyRecord 저장 실패해도 세션 종료는 완료된 상태로 유지
         }
     }
 
     /**
-     * 세션 ID로 세션 종료 (뒤로가기 버튼용)
+     * 학습 세션 강제 종료 (뒤로가기 버튼용)
      */
     @Transactional
     public void endStudySessionById(Long sessionId) {
@@ -137,13 +167,9 @@ public class StudyRecordService {
         LocalDateTime endTime = LocalDateTime.now();
         session.setEndTime(endTime);
 
-        // 총 문제 수와 정답 수가 설정되지 않은 경우 기본값 설정
-        if (session.getTotalQuestions() == null) {
-            session.setTotalQuestions(0);
-        }
-        if (session.getCorrectAnswers() == null) {
-            session.setCorrectAnswers(0);
-        }
+        // 실시간 카운트를 기반으로 총 문제 수와 정답 수 설정
+        session.setTotalQuestions(session.getTotalCurrentQuestions());
+        session.setCorrectAnswers(session.getCurrentCorrectCount());
 
         studySessionRepository.save(session);
 
@@ -153,15 +179,20 @@ public class StudyRecordService {
             studyTimeSeconds = 1; // 최소 1초
         }
 
-        logger.info("세션 강제 종료 완료 - 세션 ID: {}, 학습 시간: {}초", sessionId, studyTimeSeconds);
+        logger.info("세션 강제 종료 완료 - 세션 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
+                sessionId, studyTimeSeconds, session.getCurrentCorrectCount(),
+                session.getCurrentIncorrectCount());
 
-        // 학습 시간이 있으면 StudyRecord에 저장
-        if (studyTimeSeconds > 0) {
+        // 학습한 문제가 있으면 StudyRecord에 저장
+        if (session.getTotalCurrentQuestions() > 0) {
             try {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                        session.getTotalQuestions(), (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
-                logger.info("강제 종료 시 StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초",
-                        session.getUserId(), studyTimeSeconds);
+                        session.getTotalCurrentQuestions(), (int) studyTimeSeconds,
+                        convertStudyType(session.getStudyType()),
+                        session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
+                logger.info("강제 종료 시 StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
+                        session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
+                        session.getCurrentIncorrectCount());
             } catch (Exception e) {
                 logger.error("강제 종료 시 StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
             }
@@ -169,36 +200,48 @@ public class StudyRecordService {
     }
 
     /**
-     * 단어별 학습 결과 기록
+     * 학습 기록 저장 (정답/오답 개수 포함)
      */
-    public void recordWordResult(Long userId, Long wordId, boolean isCorrect,
-                                 WordStudyResult.StudyType studyType) {
-        logger.debug("단어 학습 결과 기록 - 사용자: {}, 단어: {}, 정답 여부: {}, 타입: {}",
-                userId, wordId, isCorrect, studyType);
+    private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
+                                 int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType,
+                                 int correctCount, int incorrectCount) {
+        LocalDate today = LocalDate.now();
 
-        Optional<WordStudyResult> existingResult = wordStudyResultRepository
-                .findByUserIdAndWordIdAndStudyType(userId, wordId, studyType);
+        // 오늘 같은 조건의 기록이 있는지 확인
+        List<StudyRecord> todayRecords = studyRecordRepository.findByUserIdAndDateRange(userId, today, today);
 
-        if (existingResult.isPresent()) {
-            // 기존 기록 업데이트
-            WordStudyResult result = existingResult.get();
-            result.setIsCorrect(isCorrect);
-            result.setAttemptCount(result.getAttemptCount() + 1);
-            result.setLastStudiedAt(LocalDateTime.now());
-            wordStudyResultRepository.save(result);
+        Optional<StudyRecord> existingRecord = todayRecords.stream()
+                .filter(record -> record.getLevelName().equals(levelName) &&
+                        record.getPartOfSpeech().equals(partOfSpeech) &&
+                        record.getStudyType().equals(studyType))
+                .findFirst();
+
+        if (existingRecord.isPresent()) {
+            // 기존 기록에 누적
+            StudyRecord record = existingRecord.get();
+            record.setWordCount(record.getWordCount() + wordCount);
+            record.setStudyTime(record.getStudyTime() + studyTimeSeconds);
+            // 정답/오답 개수도 누적 (필요하다면 StudyRecord에 필드 추가)
+            studyRecordRepository.save(record);
+            logger.info("기존 학습 기록 업데이트 - 사용자: {}, 추가 시간: {}초, 정답: {}, 오답: {}, 총 시간: {}초",
+                    userId, studyTimeSeconds, correctCount, incorrectCount, record.getStudyTime());
         } else {
             // 새로운 기록 생성
-            WordStudyResult newResult = WordStudyResult.builder()
+            StudyRecord newRecord = StudyRecord.builder()
                     .userId(userId)
-                    .wordId(wordId)
+                    .levelName(levelName)
+                    .partOfSpeech(partOfSpeech)
+                    .wordCount(wordCount)
+                    .studyTime(studyTimeSeconds)
+                    .studyDate(today)
                     .studyType(studyType)
-                    .isCorrect(isCorrect)
-                    .attemptCount(1)
-                    .lastStudiedAt(LocalDateTime.now())
                     .build();
-            wordStudyResultRepository.save(newResult);
+            studyRecordRepository.save(newRecord);
+            logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
+                    userId, studyTimeSeconds, correctCount, incorrectCount);
         }
     }
+
 
     /**
      * 학습 기록 저장 (초 단위)
@@ -249,6 +292,38 @@ public class StudyRecordService {
         return records.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 단어별 학습 결과 기록
+     */
+    public void recordWordResult(Long userId, Long wordId, boolean isCorrect,
+                                 WordStudyResult.StudyType studyType) {
+        logger.debug("단어 학습 결과 기록 - 사용자: {}, 단어: {}, 정답 여부: {}, 타입: {}",
+                userId, wordId, isCorrect, studyType);
+
+        Optional<WordStudyResult> existingResult = wordStudyResultRepository
+                .findByUserIdAndWordIdAndStudyType(userId, wordId, studyType);
+
+        if (existingResult.isPresent()) {
+            // 기존 기록 업데이트
+            WordStudyResult result = existingResult.get();
+            result.setIsCorrect(isCorrect);
+            result.setAttemptCount(result.getAttemptCount() + 1);
+            result.setLastStudiedAt(LocalDateTime.now());
+            wordStudyResultRepository.save(result);
+        } else {
+            // 새로운 기록 생성
+            WordStudyResult newResult = WordStudyResult.builder()
+                    .userId(userId)
+                    .wordId(wordId)
+                    .studyType(studyType)
+                    .isCorrect(isCorrect)
+                    .attemptCount(1)
+                    .lastStudiedAt(LocalDateTime.now())
+                    .build();
+            wordStudyResultRepository.save(newResult);
+        }
     }
 
     /**
