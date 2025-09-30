@@ -1,3 +1,4 @@
+// src/main/java/com/engineer_2003/backend/controller/UserController.java
 package com.engineer_2003.backend.controller;
 
 import org.springframework.http.ResponseEntity;
@@ -7,8 +8,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.engineer_2003.backend.dto.UserRegistrationDto;
-import com.engineer_2003.backend.dto.PasswordResetDto; // DTO 임포트
+import com.engineer_2003.backend.dto.GoogleLoginRequestDto;
+import com.engineer_2003.backend.dto.PasswordResetDto;
+import com.engineer_2003.backend.dto.UserRegistrationDto; // DTO 임포트
 import com.engineer_2003.backend.service.UserService;
 
 @RestController
@@ -36,6 +38,16 @@ public class UserController {
     @PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody UserRegistrationDto loginDto) {
         String token = userService.login(loginDto.getUsername(), loginDto.getPassword());
+        if (token == null) {
+            return ResponseEntity.status(401).body("로그인 실패");
+        }
+        return ResponseEntity.ok(token);
+    }
+
+    // Google 로그인 엔드포인트 추가
+    @PostMapping("/login/google")
+    public ResponseEntity<String> googleLogin(@RequestBody GoogleLoginRequestDto requestDto) {
+        String token = userService.processGoogleLogin(requestDto.getEmail());
         if (token == null) {
             return ResponseEntity.status(401).body("로그인 실패");
         }

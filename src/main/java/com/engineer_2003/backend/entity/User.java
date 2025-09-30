@@ -1,3 +1,4 @@
+// src/main/java/com/engineer_2003/backend/entity/User.java
 package com.engineer_2003.backend.entity;
 
 import java.time.LocalDateTime;
@@ -31,7 +32,7 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255) // nullable = false 제거
     private String password;
     
     @Column(nullable = false, unique = true)
@@ -43,6 +44,8 @@ public class User {
     private LocalDateTime updatedAt;
 
     private String resetToken; // 비밀번호 재설정 토큰 필드 추가
+
+    private String provider; // OAuth 제공자 정보 추가 (e.g., "google")
 
     // 수동으로 getter 메서드 추가 (Lombok 오류 방지)
     public Long getUserId() {
