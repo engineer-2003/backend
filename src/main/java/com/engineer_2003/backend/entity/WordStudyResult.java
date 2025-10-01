@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class WordStudyResult {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -29,15 +28,19 @@ public class WordStudyResult {
     @Enumerated(EnumType.STRING)
     private StudyType studyType;
 
+    @Builder.Default
     @Column(name = "is_correct", nullable = false)
     private Boolean isCorrect = false;
 
+    @Builder.Default
     @Column(name = "attempt_count")
     private Integer attemptCount = 1;
 
+    @Builder.Default
     @Column(name = "last_studied_at")
     private LocalDateTime lastStudiedAt = LocalDateTime.now();
 
+    @Builder.Default
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
