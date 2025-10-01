@@ -30,10 +30,11 @@ public class SecurityConfig {
                 .cors(cors -> {})
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 아래 엔드포인트는 인증 없이 접근을 허용합니다.
+                        // 아래 엔드포인트는 인증 없이 접근을 허용
                         .requestMatchers(
-                            "/api/users/signup", 
+                            "/api/users/signup",
                             "/api/users/login",
+                            "/api/users/login/google",
                             "/api/users/find-password",
                             "/api/users/reset-password"
                         ).permitAll()

@@ -1,3 +1,4 @@
+// src/main/java/com/engineer_2003/backend/service/UserService.java
 package com.engineer_2003.backend.service;
 
 import java.util.UUID;
@@ -7,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.engineer_2003.backend.dto.UserRegistrationDto;
-import com.engineer_2003.backend.entity.User; // DTO 임포트
+import com.engineer_2003.backend.entity.User;
 import com.engineer_2003.backend.repository.UserRepository;
 import com.engineer_2003.backend.security.jwt.JwtTokenProvider;
 
@@ -40,6 +41,36 @@ public class UserService {
                 .build();
 
         userRepository.save(user);
+    }
+    
+    // Google 로그인 처리
+    @Transactional
+    public String processGoogleLogin(String email) {
+        User user = userRepository.findByEmailAndProvider(email, "google");
+
+        if (user == null) {
+            // 구글 정보로 신규 회원 생성
+            // username은 유니크해야 하므로 이메일 앞부분과 랜덤 문자열을 조합
+            String username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
+            
+            // 이미 해당 username이 존재할 경우를 대비한 예외 처리 (선택사항)
+            while (userRepository.existsByUsername(username)) {
+                username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
+            }
+
+            User newUser = User.builder()
+                .username(username)
+                .email(email)
+                // 소셜 로그인이므로 비밀번호는 랜덤 값으로 채움
+                .password(passwordEncoder.encode(UUID.randomUUID().toString())) 
+                .provider("google")
+                .build();
+            userRepository.save(newUser);
+            user = newUser;
+        }
+
+        // JWT 토큰 생성 및 반환
+        return jwtTokenProvider.generateToken(user.getUsername());
     }
 
     // 비밀번호 찾기 기능 (토큰 발송)
