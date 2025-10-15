@@ -32,11 +32,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 아래 엔드포인트는 인증 없이 접근을 허용
                         .requestMatchers(
-                            "/api/users/signup",
-                            "/api/users/login",
-                            "/api/users/login/google",
-                            "/api/users/find-password",
-                            "/api/users/reset-password"
+                                "/api/users/signup",
+                                "/api/users/login",
+                                "/api/users/login/google",
+                                "/api/users/find-password",
+                                "/api/users/reset-password"
                         ).permitAll()
 
                         // 인증 없이 접근 가능한 학습 API (단어 조회, 문제 생성 등)

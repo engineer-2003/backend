@@ -42,7 +42,7 @@ public class UserService {
 
         userRepository.save(user);
     }
-    
+
     // Google 로그인 처리
     @Transactional
     public String processGoogleLogin(String email) {
@@ -52,19 +52,19 @@ public class UserService {
             // 구글 정보로 신규 회원 생성
             // username은 유니크해야 하므로 이메일 앞부분과 랜덤 문자열을 조합
             String username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
-            
+
             // 이미 해당 username이 존재할 경우를 대비한 예외 처리 (선택사항)
             while (userRepository.existsByUsername(username)) {
                 username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
             }
 
             User newUser = User.builder()
-                .username(username)
-                .email(email)
-                // 소셜 로그인이므로 비밀번호는 랜덤 값으로 채움
-                .password(passwordEncoder.encode(UUID.randomUUID().toString())) 
-                .provider("google")
-                .build();
+                    .username(username)
+                    .email(email)
+                    // 소셜 로그인이므로 비밀번호는 랜덤 값으로 채움
+                    .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                    .provider("google")
+                    .build();
             userRepository.save(newUser);
             user = newUser;
         }
@@ -85,7 +85,7 @@ public class UserService {
         user.setResetToken(resetToken);
         userRepository.save(user);
 
-        String resetLink = "http://localhost:5173/reset-password?token=" + resetToken;
+        String resetLink = "http://localhost:5173/user/reset-password?token=" + resetToken; // 프론트엔드 경로 업데이트
         emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
     }
 
@@ -103,7 +103,7 @@ public class UserService {
         user.setResetToken(null); // 사용된 토큰은 무효화
         userRepository.save(user);
     }
-    
+
     // 로그인
     public String login(String username, String password) {
         User user = userRepository.findByUsername(username);
@@ -118,7 +118,7 @@ public class UserService {
         return userRepository.findByUsername(username);
     }
 
-    // 사용자명으로 사용자 ID 조회
+    // 사용자명으로 사용자 ID 조회 (AuthUtils와 별개로 내부 서비스에서 사용)
     public Long getUserIdByUsername(String username) {
         User user = userRepository.findByUsername(username);
         if (user == null) {

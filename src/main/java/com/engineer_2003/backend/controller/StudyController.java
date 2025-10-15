@@ -3,16 +3,13 @@ package com.engineer_2003.backend.controller;
 import com.engineer_2003.backend.dto.StudyRecordDto;
 import com.engineer_2003.backend.dto.WordDto;
 import com.engineer_2003.backend.entity.StudySession;
-import com.engineer_2003.backend.entity.User;
 import com.engineer_2003.backend.entity.WordStudyResult;
-import com.engineer_2003.backend.repository.UserRepository;
 import com.engineer_2003.backend.service.StudyRecordService;
 import com.engineer_2003.backend.service.WordService;
-import com.engineer_2003.backend.security.jwt.JwtTokenProvider;
+import com.engineer_2003.backend.security.AuthUtils; // AuthUtils 사용
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +22,8 @@ import java.util.HashMap;
 @RestController
 @RequestMapping("/study")
 @CrossOrigin(origins = "http://localhost:5173")
-public class WordController {
-    private static final Logger logger = LoggerFactory.getLogger(WordController.class);
+public class StudyController { // 클래스명 변경
+    private static final Logger logger = LoggerFactory.getLogger(StudyController.class);
 
     @Autowired
     private WordService wordService;
@@ -35,10 +32,7 @@ public class WordController {
     private StudyRecordService studyRecordService;
 
     @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-
-    @Autowired
-    private UserRepository userRepository;
+    private AuthUtils authUtils; // AuthUtils 주입
 
     @GetMapping
     public ResponseEntity<List<WordDto>> getWords(
@@ -49,13 +43,8 @@ public class WordController {
 
         try {
             // 입력값 검증
-            if (level == null || level.trim().isEmpty()) {
-                logger.warn("레벨이 제공되지 않음");
-                return ResponseEntity.badRequest().build();
-            }
-
-            if (part == null || part.trim().isEmpty()) {
-                logger.warn("품사가 제공되지 않음");
+            if (level == null || level.trim().isEmpty() || part == null || part.trim().isEmpty()) {
+                logger.warn("레벨 또는 품사가 제공되지 않음");
                 return ResponseEntity.badRequest().build();
             }
 
@@ -216,6 +205,7 @@ public class WordController {
                 correctAnswer = word.getWord();
                 String reading = word.getReading();
                 String trimmedAnswer = answer.trim();
+                // 원형 정답 확인: 원형 또는 읽기가 정답인지 확인
                 isCorrect = correctAnswer.equals(trimmedAnswer) || (reading != null && reading.equals(trimmedAnswer));
                 logger.info("활용형 없음, 단어/reading 체크 - 단어 ID: {}, 답안: {}", id, answer);
             } else {
@@ -239,7 +229,7 @@ public class WordController {
             // 로그인한 사용자인 경우 학습 결과 저장
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 try {
-                    Long userId = extractUserIdFromToken(authHeader);
+                    Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
                     WordStudyResult.StudyType type;
 
                     if (studyType != null && !studyType.trim().isEmpty()) {
@@ -309,7 +299,7 @@ public class WordController {
 
         try {
             // JWT 토큰에서 사용자 ID 추출
-            Long userId = extractUserIdFromToken(authHeader);
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
 
             WordStudyResult.StudyType type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
             List<WordDto> incorrectWords = studyRecordService.getIncorrectWords(userId, level, part, type);
@@ -337,26 +327,10 @@ public class WordController {
 
         try {
             // 입력값 검증
-            if (level == null || level.trim().isEmpty()) {
-                logger.warn("레벨이 제공되지 않음");
+            if (level == null || level.trim().isEmpty() || part == null || part.trim().isEmpty() || studyType == null || studyType.trim().isEmpty()) {
+                logger.warn("입력 매개변수 중 누락된 항목이 있음");
                 Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "레벨을 입력해주세요.");
-                errorResponse.put("count", 0);
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            if (part == null || part.trim().isEmpty()) {
-                logger.warn("품사가 제공되지 않음");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "품사를 입력해주세요.");
-                errorResponse.put("count", 0);
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            if (studyType == null || studyType.trim().isEmpty()) {
-                logger.warn("학습 타입이 제공되지 않음");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "학습 타입을 입력해주세요.");
+                errorResponse.put("error", "입력 매개변수를 확인해주세요.");
                 errorResponse.put("count", 0);
                 return ResponseEntity.badRequest().body(errorResponse);
             }
@@ -364,7 +338,7 @@ public class WordController {
             // JWT 토큰에서 사용자 ID 추출
             Long userId;
             try {
-                userId = extractUserIdFromToken(authHeader);
+                userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
                 logger.info("사용자 ID 추출 성공: {}", userId);
             } catch (Exception tokenError) {
                 logger.error("JWT 토큰 처리 중 오류 발생", tokenError);
@@ -413,7 +387,7 @@ public class WordController {
             @RequestHeader("Authorization") String authHeader) {
 
         try {
-            Long userId = extractUserIdFromToken(authHeader);
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
             String level = (String) request.get("level");
             String part = (String) request.get("part");
             String studyType = (String) request.get("studyType");
@@ -447,19 +421,11 @@ public class WordController {
         logger.info("학습 세션 종료 요청 - 세션 ID: {}", sessionId);
 
         try {
-            Long userId;
-
-            // Authorization 헤더 또는 URL 파라미터에서 토큰 추출 (Beacon API 지원)
+            // 사용자 ID 인증/추출
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                userId = extractUserIdFromToken(authHeader);
-                logger.debug("Authorization 헤더에서 사용자 ID 추출: {}", userId);
+                authUtils.extractUserIdFromAuthHeader(authHeader); // 인증 확인
             } else if (authToken != null && !authToken.isEmpty()) {
-                if (!jwtTokenProvider.validateToken(authToken)) {
-                    throw new IllegalArgumentException("유효하지 않은 JWT 토큰입니다.");
-                }
-                String username = getUsernameFromToken(authToken);
-                userId = getUserIdByUsername(username);
-                logger.debug("URL 파라미터에서 사용자 ID 추출: {}", userId);
+                authUtils.extractUserIdFromToken(authToken); // 인증 확인
             } else {
                 logger.warn("인증 정보가 없음");
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -480,36 +446,9 @@ public class WordController {
 
             logger.info("학습 결과: 정답={}, 오답={}, 총 문제={}", correctCount, incorrectCount, totalCount);
 
+            // 세션 종료 및 StudyRecord에 기록
+            // studyRecordService에서 세션의 current count를 사용하여 실제 기록을 처리합니다.
             studyRecordService.endStudySession(sessionId, totalCount, correctCount);
-
-            // 개별 단어 결과 처리 (선택사항)
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> studyResults = (List<Map<String, Object>>) request.get("studyResults");
-            if (studyResults != null && !studyResults.isEmpty()) {
-                logger.info("개별 학습 결과 처리: {} 항목", studyResults.size());
-
-                for (Map<String, Object> result : studyResults) {
-                    try {
-                        Long wordId = Long.valueOf(result.get("wordId").toString());
-                        Boolean isCorrect = (Boolean) result.get("isCorrect");
-                        String studyTypeStr = (String) result.getOrDefault("studyType", "SENTENCE");
-
-                        WordStudyResult.StudyType studyType;
-                        try {
-                            studyType = WordStudyResult.StudyType.valueOf(studyTypeStr.toUpperCase());
-                        } catch (IllegalArgumentException e) {
-                            logger.warn("지원하지 않는 studyType: {}. 기본값 SENTENCE 사용", studyTypeStr);
-                            studyType = WordStudyResult.StudyType.SENTENCE;
-                        }
-
-                        studyRecordService.recordWordResult(userId, wordId, isCorrect, studyType);
-                        logger.debug("단어 결과 저장: wordId={}, isCorrect={}, studyType={}", wordId, isCorrect, studyType);
-
-                    } catch (Exception wordResultError) {
-                        logger.warn("개별 단어 결과 저장 실패: {}", result, wordResultError);
-                    }
-                }
-            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("sessionId", sessionId);
@@ -548,7 +487,7 @@ public class WordController {
         logger.info("학습 세션 강제 종료 요청 - 세션 ID: {}", sessionId);
 
         try {
-            Long userId = extractUserIdFromToken(authHeader);
+            authUtils.extractUserIdFromAuthHeader(authHeader); // 인증 확인
 
             if (sessionId == null || sessionId <= 0) {
                 logger.warn("잘못된 세션 ID: {}", sessionId);
@@ -586,14 +525,12 @@ public class WordController {
      */
     @GetMapping("/records")
     public ResponseEntity<List<StudyRecordDto>> getStudyRecords(
-            @RequestHeader("Authorization") String authHeader,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestHeader("Authorization") String authHeader) {
 
-        logger.info("학습 기록 조회 요청 - 페이지: {}, 크기: {}", page, size);
+        logger.info("학습 기록 조회 요청");
 
         try {
-            Long userId = extractUserIdFromToken(authHeader);
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
             List<StudyRecordDto> records = studyRecordService.getStudyRecords(userId);
 
             logger.info("학습 기록 조회 성공 - 사용자 ID: {}, 기록 개수: {}", userId, records.size());
@@ -616,7 +553,7 @@ public class WordController {
         logger.info("학습 결과 저장 요청");
 
         try {
-            Long userId = extractUserIdFromToken(authHeader);
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
             Long wordId = Long.valueOf(request.get("wordId").toString());
             Boolean isCorrect = (Boolean) request.get("isCorrect");
             String studyType = (String) request.get("studyType");
@@ -636,46 +573,5 @@ public class WordController {
             errorResponse.put("error", "학습 결과 저장 중 오류가 발생했습니다.");
             return ResponseEntity.internalServerError().body(errorResponse);
         }
-    }
-
-    /**
-     * JWT 토큰에서 사용자 ID 추출
-     */
-    private Long extractUserIdFromToken(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("유효하지 않은 Authorization 헤더입니다.");
-        }
-
-        String token = authHeader.substring(7); // "Bearer " 제거
-
-        if (!jwtTokenProvider.validateToken(token)) {
-            throw new IllegalArgumentException("유효하지 않은 JWT 토큰입니다.");
-        }
-
-        String username = getUsernameFromToken(token);
-        return getUserIdByUsername(username);
-    }
-
-    /**
-     * JWT 토큰에서 사용자명 추출
-     */
-    private String getUsernameFromToken(String token) {
-        try {
-            Authentication auth = jwtTokenProvider.getAuthentication(token);
-            return auth.getName();
-        } catch (Exception e) {
-            throw new IllegalArgumentException("토큰에서 사용자명을 추출할 수 없습니다.", e);
-        }
-    }
-
-    /**
-     * username으로 사용자 ID 조회
-     */
-    private Long getUserIdByUsername(String username) {
-        User user = userRepository.findByUsername(username);
-        if (user == null) {
-            throw new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username);
-        }
-        return user.getUserId();
     }
 }

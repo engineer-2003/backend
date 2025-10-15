@@ -110,8 +110,13 @@ public class StudyRecordService {
         // 현재 시간으로 종료 시간 설정
         LocalDateTime endTime = LocalDateTime.now();
         session.setEndTime(endTime);
-        session.setTotalQuestions(totalQuestions);
-        session.setCorrectAnswers(correctAnswers);
+
+        // 프론트엔드에서 전달받은 값 대신 세션에 누적된 실시간 카운트를 사용
+        int actualQuestions = session.getTotalCurrentQuestions();
+        int actualCorrect = session.getCurrentCorrectCount();
+
+        session.setTotalQuestions(actualQuestions);
+        session.setCorrectAnswers(actualCorrect);
 
         // 세션 저장
         studySessionRepository.save(session);
@@ -128,11 +133,9 @@ public class StudyRecordService {
 
         // StudyRecord에 실시간 카운트를 기반으로 저장
         try {
-            int actualQuestions = session.getTotalCurrentQuestions();
             if (actualQuestions > 0) {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                        actualQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()),
-                        session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
+                        actualQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
                 logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                         session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
                         session.getCurrentIncorrectCount());
@@ -168,7 +171,8 @@ public class StudyRecordService {
         session.setEndTime(endTime);
 
         // 실시간 카운트를 기반으로 총 문제 수와 정답 수 설정
-        session.setTotalQuestions(session.getTotalCurrentQuestions());
+        int actualQuestions = session.getTotalCurrentQuestions();
+        session.setTotalQuestions(actualQuestions);
         session.setCorrectAnswers(session.getCurrentCorrectCount());
 
         studySessionRepository.save(session);
@@ -184,12 +188,11 @@ public class StudyRecordService {
                 session.getCurrentIncorrectCount());
 
         // 학습한 문제가 있으면 StudyRecord에 저장
-        if (session.getTotalCurrentQuestions() > 0) {
+        if (actualQuestions > 0) {
             try {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                        session.getTotalCurrentQuestions(), (int) studyTimeSeconds,
-                        convertStudyType(session.getStudyType()),
-                        session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
+                        actualQuestions, (int) studyTimeSeconds,
+                        convertStudyType(session.getStudyType()));
                 logger.info("강제 종료 시 StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                         session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
                         session.getCurrentIncorrectCount());
@@ -200,51 +203,7 @@ public class StudyRecordService {
     }
 
     /**
-     * 학습 기록 저장 (정답/오답 개수 포함)
-     */
-    private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
-                                 int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType,
-                                 int correctCount, int incorrectCount) {
-        LocalDate today = LocalDate.now();
-
-        // 오늘 같은 조건의 기록이 있는지 확인
-        List<StudyRecord> todayRecords = studyRecordRepository.findByUserIdAndDateRange(userId, today, today);
-
-        Optional<StudyRecord> existingRecord = todayRecords.stream()
-                .filter(record -> record.getLevelName().equals(levelName) &&
-                        record.getPartOfSpeech().equals(partOfSpeech) &&
-                        record.getStudyType().equals(studyType))
-                .findFirst();
-
-        if (existingRecord.isPresent()) {
-            // 기존 기록에 누적
-            StudyRecord record = existingRecord.get();
-            record.setWordCount(record.getWordCount() + wordCount);
-            record.setStudyTime(record.getStudyTime() + studyTimeSeconds);
-            // 정답/오답 개수도 누적 (필요하다면 StudyRecord에 필드 추가)
-            studyRecordRepository.save(record);
-            logger.info("기존 학습 기록 업데이트 - 사용자: {}, 추가 시간: {}초, 정답: {}, 오답: {}, 총 시간: {}초",
-                    userId, studyTimeSeconds, correctCount, incorrectCount, record.getStudyTime());
-        } else {
-            // 새로운 기록 생성
-            StudyRecord newRecord = StudyRecord.builder()
-                    .userId(userId)
-                    .levelName(levelName)
-                    .partOfSpeech(partOfSpeech)
-                    .wordCount(wordCount)
-                    .studyTime(studyTimeSeconds)
-                    .studyDate(today)
-                    .studyType(studyType)
-                    .build();
-            studyRecordRepository.save(newRecord);
-            logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
-                    userId, studyTimeSeconds, correctCount, incorrectCount);
-        }
-    }
-
-
-    /**
-     * 학습 기록 저장 (초 단위)
+     * 학습 기록 저장 (StudyRecord entity에 맞게 wordCount와 studyTime만 누적)
      */
     private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
                                  int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType) {
@@ -282,6 +241,7 @@ public class StudyRecordService {
             logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초", userId, studyTimeSeconds);
         }
     }
+
 
     /**
      * 사용자의 학습 기록 조회
