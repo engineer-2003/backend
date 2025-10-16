@@ -28,19 +28,23 @@ public class StudyRecord {
     @Column(name = "part_of_speech", nullable = false)
     private String partOfSpeech;
 
+    @Builder.Default // 경고 해결
     @Column(name = "word_count", nullable = false)
     private Integer wordCount = 0;
 
+    @Builder.Default // 경고 해결
     @Column(name = "study_time", nullable = false)
     private Integer studyTime = 0; // 초 단위로 변경
 
     @Column(name = "study_date", nullable = false)
     private LocalDate studyDate;
 
+    @Builder.Default // 경고 해결
     @Column(name = "study_type", nullable = false)
     @Enumerated(EnumType.STRING)
     private StudyType studyType = StudyType.SENTENCE;
 
+    @Builder.Default // 경고 해결
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 

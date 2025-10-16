@@ -31,25 +31,31 @@ public class StudySession {
     @Enumerated(EnumType.STRING)
     private StudyType studyType;
 
+    @Builder.Default // 경고 해결
     @Column(name = "start_time")
     private LocalDateTime startTime = LocalDateTime.now();
 
     @Column(name = "end_time")
     private LocalDateTime endTime;
 
+    @Builder.Default // 경고 해결
     @Column(name = "total_questions")
     private Integer totalQuestions = 0;
 
+    @Builder.Default // 경고 해결
     @Column(name = "correct_answers")
     private Integer correctAnswers = 0;
 
+    @Builder.Default // 경고 해결
     @Column(name = "is_retry_session")
     private Boolean isRetrySession = false;
 
     // 실시간 정답/오답 카운트 추가
+    @Builder.Default // 경고 해결
     @Column(name = "current_correct_count")
     private Integer currentCorrectCount = 0;
 
+    @Builder.Default // 경고 해결
     @Column(name = "current_incorrect_count")
     private Integer currentIncorrectCount = 0;
 
