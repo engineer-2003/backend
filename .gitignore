@@ -1,10 +1,24 @@
-HELP.md
+# Java & Gradle
+.gradle/
+build/
+out/
+
+# Compiled Java
+*.class
+
+# Package files
+*.jar
+*.war
+*.ear
+
+# Log files
+*.log
+
+### Maven (from original file) ###
 target/
 .mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
 
-### STS ###
+### STS (from original file) ###
 .apt_generated
 .classpath
 .factorypath
@@ -13,26 +27,22 @@ target/
 .springBeans
 .sts4-cache
 
-### IntelliJ IDEA ###
-.idea
+### IntelliJ IDEA (from original file) ###
+.idea/
 *.iws
 *.iml
 *.ipr
 
-### NetBeans ###
+### NetBeans (from original file) ###
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
+### VS Code (from original file) ###
 .vscode/
 
-### Gradle and IDE ###
-.gradle/
-.idea/
-build/
+### OS generated files ###
+.DS_Store
+Thumbs.db
