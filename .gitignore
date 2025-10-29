@@ -1,6 +1,7 @@
-# Java & Gradle
-.gradle/
+# Java Build Artifacts
+bin/
 build/
+target/
 out/
 
 # Compiled Java
@@ -15,7 +16,6 @@ out/
 *.log
 
 ### Maven (from original file) ###
-target/
 .mvn/wrapper/maven-wrapper.jar
 
 ### STS (from original file) ###
