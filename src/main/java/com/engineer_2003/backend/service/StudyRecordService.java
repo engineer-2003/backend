@@ -1,4 +1,5 @@
-// StudyRecordService.java
+// src/main/java/com/engineer_2003/backend/service/StudyRecordService.java
+
 package com.engineer_2003.backend.service;
 
 import com.engineer_2003.backend.dto.StudyRecordDto;
@@ -11,7 +12,7 @@ import com.engineer_2003.backend.repository.StudyRecordRepository;
 import com.engineer_2003.backend.repository.StudySessionRepository;
 import com.engineer_2003.backend.repository.WordStudyResultRepository;
 import com.engineer_2003.backend.repository.WordRepository;
-import com.engineer_2003.backend.security.AuthUtils; // AuthUtils 추가
+import com.engineer_2003.backend.security.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections; // Collections 추가
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -51,8 +52,9 @@ public class StudyRecordService {
         logger.info("학습 세션 시작 - 사용자: {}, 레벨: {}, 품사: {}, 타입: {}, 재학습: {}",
                 userId, levelName, partOfSpeech, studyType, isRetrySession);
 
+        // 게스트 사용자(ID: 0L)도 DB에 세션을 저장하도록 변경
         StudySession session = StudySession.builder()
-                .userId(userId) // 게스트(0L)도 저장
+                .userId(userId)
                 .levelName(levelName)
                 .partOfSpeech(partOfSpeech)
                 .studyType(studyType)
@@ -65,9 +67,9 @@ public class StudyRecordService {
         return studySessionRepository.save(session);
     }
 
-    // ... (updateSessionCount, endStudySession, endStudySessionById, saveStudyRecord, getStudyRecords는 동일하게 유지하거나 StudyController에서 이미 처리)
-
-    // updateSessionCount: 변경 없음
+    /**
+     * 세션의 정답/오답 카운트 업데이트
+     */
     @Transactional
     public void updateSessionCount(Long sessionId, boolean isCorrect) {
         Optional<StudySession> sessionOpt = studySessionRepository.findById(sessionId);
@@ -88,7 +90,9 @@ public class StudyRecordService {
                 sessionId, session.getCurrentCorrectCount(), session.getCurrentIncorrectCount());
     }
 
-    // endStudySession: 변경 없음 (세션의 userId를 사용하여 StudyRecord 저장)
+    /**
+     * 학습 세션 종료 및 기록 저장 (완료 시)
+     */
     @Transactional
     public void endStudySession(Long sessionId, int totalQuestions, int correctAnswers) {
         logger.info("학습 세션 종료 - 세션 ID: {}, 총 문제: {}, 정답: {}", sessionId, totalQuestions, correctAnswers);
@@ -120,12 +124,13 @@ public class StudyRecordService {
 
         long studyTimeSeconds = java.time.Duration.between(session.getStartTime(), endTime).getSeconds();
         if (studyTimeSeconds < 1) {
-            studyTimeSeconds = 1;
+            studyTimeSeconds = 1; // 최소 1초
         }
 
         logger.info("학습 시간 계산 - 세션 ID: {}, 시작: {}, 종료: {}, 소요시간: {}초",
                 sessionId, session.getStartTime(), endTime, studyTimeSeconds);
 
+        // StudyRecord에 실시간 카운트를 기반으로 저장 (게스트 포함)
         try {
             if (actualQuestions > 0) {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
@@ -133,13 +138,18 @@ public class StudyRecordService {
                 logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                         session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
                         session.getCurrentIncorrectCount());
+            } else {
+                logger.info("StudyRecord 저장 스킵: 문제 없음({})", actualQuestions);
             }
         } catch (Exception e) {
             logger.error("StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
+            // 외래 키 오류가 발생하면 여기에 잡힘
         }
     }
 
-    // endStudySessionById: 변경 없음 (세션의 userId를 사용하여 StudyRecord 저장)
+    /**
+     * 학습 세션 강제 종료 (뒤로가기 버튼용)
+     */
     @Transactional
     public void endStudySessionById(Long sessionId) {
         logger.info("세션 강제 종료 요청 - 세션 ID: {}", sessionId);
@@ -168,13 +178,14 @@ public class StudyRecordService {
 
         long studyTimeSeconds = java.time.Duration.between(session.getStartTime(), endTime).getSeconds();
         if (studyTimeSeconds < 1) {
-            studyTimeSeconds = 1;
+            studyTimeSeconds = 1; // 최소 1초
         }
 
         logger.info("세션 강제 종료 완료 - 세션 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                 sessionId, studyTimeSeconds, session.getCurrentCorrectCount(),
                 session.getCurrentIncorrectCount());
 
+        // 학습한 문제가 있으면 StudyRecord에 저장 (게스트 포함)
         if (actualQuestions > 0) {
             try {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
@@ -185,13 +196,19 @@ public class StudyRecordService {
                         session.getCurrentIncorrectCount());
             } catch (Exception e) {
                 logger.error("강제 종료 시 StudyRecord 저장 실패 - 세션 ID: {}", sessionId, e);
+                // 외래 키 오류가 발생하면 여기에 잡힘
             }
+        } else {
+            logger.info("강제 종료 시 StudyRecord 저장 스킵: 문제 없음({})", actualQuestions);
         }
     }
 
-    // saveStudyRecord: 변경 없음 (userId=0L인 경우 게스트 학습 기록으로 저장됨)
+    /**
+     * 학습 기록 저장 (StudyRecord entity에 맞게 wordCount와 studyTime만 누적)
+     */
     private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
                                  int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType) {
+        // userId가 0L인 경우에도 저장 진행 (DB에서 FK 제약 조건 제거 필수)
         LocalDate today = LocalDate.now();
 
         List<StudyRecord> todayRecords = studyRecordRepository.findByUserIdAndDateRange(userId, today, today);
@@ -229,7 +246,7 @@ public class StudyRecordService {
      * 사용자의 학습 기록 조회
      */
     public List<StudyRecordDto> getStudyRecords(Long userId) {
-        // StudyController에서 userId=0L일 때 빈 목록을 반환하도록 처리
+        // userId가 0L인 경우에도 조회 진행
         List<StudyRecord> records = studyRecordRepository.findByUserIdOrderByStudyDateDesc(userId);
 
         return records.stream()
@@ -238,15 +255,11 @@ public class StudyRecordService {
     }
 
     /**
-     * 단어별 학습 결과 기록 (게스트는 저장 스킵)
+     * 단어별 학습 결과 기록 (게스트 포함)
      */
     public void recordWordResult(Long userId, Long wordId, boolean isCorrect,
                                  WordStudyResult.StudyType studyType) {
-        if (userId == AuthUtils.GUEST_USER_ID) {
-            logger.warn("게스트 사용자는 단어별 학습 결과를 저장할 수 없습니다. 스킵합니다.");
-            return;
-        }
-
+        // userId가 0L인 경우에도 저장 진행 (DB에서 FK 제약 조건 제거 필수)
         logger.debug("단어 학습 결과 기록 - 사용자: {}, 단어: {}, 정답 여부: {}, 타입: {}",
                 userId, wordId, isCorrect, studyType);
 
@@ -273,15 +286,11 @@ public class StudyRecordService {
     }
 
     /**
-     * 틀린 단어 목록 조회 (게스트는 조회 스킵)
+     * 틀린 단어 목록 조회 (게스트 포함)
      */
     public List<WordDto> getIncorrectWords(Long userId, String levelName, String partOfSpeech,
                                            WordStudyResult.StudyType studyType) {
-        if (userId == AuthUtils.GUEST_USER_ID) {
-            logger.warn("게스트 사용자는 틀린 단어 목록을 조회할 수 없습니다. 빈 목록을 반환합니다.");
-            return Collections.emptyList();
-        }
-
+        // userId가 0L인 경우에도 조회 진행
         logger.info("틀린 단어 조회 - 사용자: {}, 레벨: {}, 품사: {}, 타입: {}",
                 userId, levelName, partOfSpeech, studyType);
 
@@ -298,19 +307,15 @@ public class StudyRecordService {
     }
 
     /**
-     * 틀린 단어 개수 조회 (게스트는 조회 스킵)
+     * 틀린 단어 개수 조회 (게스트 포함)
      */
     public Long getIncorrectWordCount(Long userId, String levelName, String partOfSpeech,
                                       WordStudyResult.StudyType studyType) {
-        if (userId == AuthUtils.GUEST_USER_ID) {
-            return 0L;
-        }
-
+        // userId가 0L인 경우에도 조회 진행
         return wordStudyResultRepository.countIncorrectWordsByUserAndLevelAndPartAndType(
                 userId, levelName, partOfSpeech, studyType);
     }
 
-    // ... (나머지 메서드는 변경 없음)
     public Integer getTotalStudyTimeInSeconds(Long userId, LocalDate startDate, LocalDate endDate) {
         Integer totalTime = studyRecordRepository.getTotalStudyTimeByUserIdAndDateRange(userId, startDate, endDate);
         return totalTime != null ? totalTime : 0;
