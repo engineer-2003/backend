@@ -24,7 +24,7 @@ RUN ./gradlew clean bootJar --no-daemon
 
 # 2. 실행 단계 (최종 실행 가능한 이미지 생성)
 # 더 작고 안전한 실행 환경을 위해 경량화된 JRE 이미지를 사용
-FROM openjdk:17-jre-slim-buster
+FROM eclipse-temurin:17-jre-alpine
 
 # 환경 변수 설정
 ENV SPRING_PROFILES_ACTIVE=prod
