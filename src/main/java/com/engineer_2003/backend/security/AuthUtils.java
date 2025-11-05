@@ -12,6 +12,11 @@ public class AuthUtils {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
 
+    // 게스트 사용자 ID 정의
+    public static final Long GUEST_USER_ID = 0L;
+    public static final String GUEST_USERNAME = "guest_user";
+
+
     public AuthUtils(JwtTokenProvider jwtTokenProvider, UserRepository userRepository) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
@@ -19,14 +24,20 @@ public class AuthUtils {
 
     /**
      * JWT 토큰에서 사용자 ID 추출 (Authorization 헤더 사용)
+     * 토큰이 없거나 유효하지 않으면 GUEST_USER_ID(0L)를 반환
      */
     public Long extractUserIdFromAuthHeader(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("유효하지 않은 Authorization 헤더입니다.");
+            return GUEST_USER_ID;
         }
 
         String token = authHeader.substring(7); // "Bearer " 제거
-        return extractUserIdFromToken(token);
+        try {
+            return extractUserIdFromToken(token);
+        } catch (IllegalArgumentException e) {
+            // 토큰이 유효하지 않으면 게스트로 처리
+            return GUEST_USER_ID;
+        }
     }
 
     /**

@@ -33,26 +33,16 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) 
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 모든 study 관련 엔드포인트와 chat 엔드포인트에 인증 없이 접근 허용
                         .requestMatchers(
-                                "/api/users/signup",
-                                "/api/users/login",
-                                "/api/users/login/google",
-                                "/api/users/find-password",
-                                "/api/users/reset-password"
+                                "/study/**",
+                                "/api/chat"
                         ).permitAll()
-                        .requestMatchers("/study", "/study/{id}", "/study/{id}/sentence-problem", "/study/{id}/form-problem", "/study/{id}/check").permitAll()
-                        .requestMatchers("/api/chat").permitAll()
-                        .requestMatchers(
-                                "/study/incorrect/**",
-                                "/study/session/**",
-                                "/study/records",
-                                "/study/result"
-                        ).authenticated()
-                        .anyRequest().authenticated()
+                        .anyRequest().authenticated() // 그 외 엔드포인트는 인증 필요
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider), UsernamePasswordAuthenticationFilter.class);
 
@@ -62,13 +52,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173")); 
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*")); 
-        configuration.setAllowCredentials(true); 
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration); 
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
