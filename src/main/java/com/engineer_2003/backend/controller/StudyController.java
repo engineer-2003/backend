@@ -1,5 +1,4 @@
 // src/main/java/com/engineer_2003/backend/controller/StudyController.java
-
 package com.engineer_2003.backend.controller;
 
 import com.engineer_2003.backend.dto.StudyRecordDto;
@@ -95,7 +94,8 @@ public class StudyController {
                 logger.warn("문제 생성 실패 - 단어 ID: {}", id);
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", "문제를 생성할 수 없습니다.");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                // **수정**: 문제 생성 실패 시 HttpStatus.BAD_REQUEST (400) 반환
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
             }
             logger.info("예문 문제 생성 성공 - 단어 ID: {}", id);
             return ResponseEntity.ok(problem);
@@ -122,7 +122,8 @@ public class StudyController {
                 logger.warn("활용형 문제 생성 실패 - 단어 ID: {}", id);
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", "활용형 문제를 생성할 수 없습니다.");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                // **수정**: 문제 생성 실패 시 HttpStatus.BAD_REQUEST (400) 반환
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
             }
             logger.info("활용형 문제 생성 성공 - 단어 ID: {}", id);
             return ResponseEntity.ok(problem);
