@@ -103,7 +103,22 @@ public class WordService {
                 return null;
             }
 
+            // 1. 예문이 없으면 문제 생성하지 않음
+            if (word.getExampleSentence() == null || word.getExampleSentence().trim().isEmpty()) {
+                logger.warn("예문이 없어 문제 생성 불가 - 단어 ID: {}", wordId);
+                return null;
+            }
+
             Map<String, Object> problem = new HashMap<>();
+
+            // 예문에서 빈칸 만들기 (단어/읽기 모두 대체 시도)
+            String blankSentence = createBlankSentence(word.getExampleSentence(), word.getWord(), word.getReading());
+
+            // 2. 빈칸이 만들어지지 않았다면 문제 생성하지 않음
+            if (!blankSentence.contains("（　）")) {
+                logger.warn("예문에서 빈칸을 만들 수 없어 문제 생성 불가 - 단어 ID: {}", wordId);
+                return null;
+            }
 
             // 기본 정보
             problem.put("id", word.getId());
@@ -111,10 +126,7 @@ public class WordService {
             problem.put("exampleTranslation", word.getExampleTranslation());
             problem.put("level", word.getLevelName());
             problem.put("part", word.getPartOfSpeech());
-
-            // 예문에서 빈칸 만들기
-            String blankSentence = createBlankSentence(word.getExampleSentence(), word.getWord(), word.getReading());
-            problem.put("blankSentence", blankSentence);
+            problem.put("blankSentence", blankSentence); // 수정된 blankSentence 추가
 
             // 정답은 원형
             problem.put("correctAnswers", Arrays.asList(word.getWord(), word.getReading()));
@@ -216,19 +228,18 @@ public class WordService {
      * 예문에서 빈칸 만들기 (백엔드에서 처리)
      */
     private String createBlankSentence(String sentence, String word, String reading) {
-        if (sentence == null || sentence.trim().isEmpty()) {
-            return "例文がありません。";
-        }
-
+        // generateSentenceProblem에서 null/empty 체크를 수행하므로, 여기서는 바로 로직 실행
         String blankSentence = sentence;
 
         // 한자 형태의 단어를 빈칸으로
         if (word != null && !word.trim().isEmpty()) {
+            // 모든 일치 항목을 대체
             blankSentence = blankSentence.replace(word, "（　）");
         }
 
-        // 히라가나 읽기도 빈칸으로 (아직 빈칸이 안 된 경우)
-        if (reading != null && !reading.trim().isEmpty() && !blankSentence.contains("（　）")) {
+        // 히라가나 읽기도 빈칸으로 (앞선 한자 대체 여부와 상관없이 무조건 대체 시도)
+        if (reading != null && !reading.trim().isEmpty()) {
+            // 모든 일치 항목을 대체
             blankSentence = blankSentence.replace(reading, "（　）");
         }
 
