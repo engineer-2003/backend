@@ -1,4 +1,3 @@
-// WordStudyResultRepository.java
 package com.engineer_2003.backend.repository;
 
 import com.engineer_2003.backend.entity.WordStudyResult;
@@ -43,16 +42,13 @@ public interface WordStudyResultRepository extends JpaRepository<WordStudyResult
             @Param("studyType") WordStudyResult.StudyType studyType
     );
 
-    // 사용자가 학습한 전체 단어 수
-    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId")
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.userId = :userId")
     Long countDistinctWordsByUserId(@Param("userId") Long userId);
 
-    // 사용자가 특정 급수에서 학습한 단어 수
-    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId AND wsr.word.level = :level")
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.userId = :userId AND wsr.word.levelName = :level")
     Long countDistinctWordsByUserIdAndLevel(@Param("userId") Long userId, @Param("level") String level);
 
-    // 사용자가 특정 급수, 품사에서 학습한 단어 수
-    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId AND wsr.word.level = :level AND wsr.word.part = :part")
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.userId = :userId AND wsr.word.levelName = :level AND wsr.word.partOfSpeech = :part")
     Long countDistinctWordsByUserIdAndLevelAndPart(@Param("userId") Long userId, @Param("level") String level, @Param("part") String part);
 
     List<WordStudyResult> findByUserIdAndIsCorrectFalse(Long userId);
