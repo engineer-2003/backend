@@ -43,5 +43,17 @@ public interface WordStudyResultRepository extends JpaRepository<WordStudyResult
             @Param("studyType") WordStudyResult.StudyType studyType
     );
 
+    // 사용자가 학습한 전체 단어 수
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId")
+    Long countDistinctWordsByUserId(@Param("userId") Long userId);
+
+    // 사용자가 특정 급수에서 학습한 단어 수
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId AND wsr.word.level = :level")
+    Long countDistinctWordsByUserIdAndLevel(@Param("userId") Long userId, @Param("level") String level);
+
+    // 사용자가 특정 급수, 품사에서 학습한 단어 수
+    @Query("SELECT COUNT(DISTINCT wsr.word.id) FROM WordStudyResult wsr WHERE wsr.user.id = :userId AND wsr.word.level = :level AND wsr.word.part = :part")
+    Long countDistinctWordsByUserIdAndLevelAndPart(@Param("userId") Long userId, @Param("level") String level, @Param("part") String part);
+
     List<WordStudyResult> findByUserIdAndIsCorrectFalse(Long userId);
 }

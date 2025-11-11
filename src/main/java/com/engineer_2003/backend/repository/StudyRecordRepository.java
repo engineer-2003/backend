@@ -57,4 +57,6 @@ public interface StudyRecordRepository extends JpaRepository<StudyRecord, Long> 
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
+
+    boolean existsByUserIdAndStudyDate(Long userId, LocalDate studyDate);
 }

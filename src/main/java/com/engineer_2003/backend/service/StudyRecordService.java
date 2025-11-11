@@ -19,8 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -339,5 +338,122 @@ public class StudyRecordService {
 
     private StudyRecord.StudyType convertStudyType(StudySession.StudyType studyType) {
         return StudyRecord.StudyType.valueOf(studyType.name());
+    }
+
+    /**
+     * 전체 학습 통계 조회
+     */
+    public Map<String, Object> getOverviewStats(Long userId) {
+        Map<String, Object> stats = new HashMap<>();
+
+        // 전체 학습한 단어 수
+        Long totalStudiedWords = wordStudyResultRepository.countDistinctWordsByUserId(userId);
+
+        // 전체 단어 수 (7150개 고정 또는 DB에서 조회)
+        Long totalWords = 7150L;
+
+        // 진도율 계산
+        double progress = totalWords > 0 ? Math.round((double) totalStudiedWords / totalWords * 100 * 100.0) / 100.0 : 0.0;
+
+        // 연속 학습 일수
+        int consecutiveDays = calculateConsecutiveDays(userId);
+
+        stats.put("totalWords", totalWords);
+        stats.put("studiedWords", totalStudiedWords);
+        stats.put("progress", progress);
+        stats.put("consecutiveDays", consecutiveDays);
+
+        return stats;
+    }
+
+    /**
+     * 급수별 학습 통계 조회
+     */
+    public List<Map<String, Object>> getLevelStats(Long userId) {
+        List<Map<String, Object>> levelStats = new ArrayList<>();
+
+        // N5, N4, N3, N2, N1 순회
+        String[] levels = {"N5", "N4", "N3", "N2", "N1"};
+        Map<String, Integer> levelWordCounts = Map.of(
+                "N5", 450, "N4", 700, "N3", 1000, "N2", 2000, "N1", 3000
+        );
+
+        for (String level : levels) {
+            Map<String, Object> stat = new HashMap<>();
+
+            // 해당 급수의 학습한 단어 수
+            Long studiedWords = wordStudyResultRepository.countDistinctWordsByUserIdAndLevel(userId, level);
+
+            // 전체 단어 수
+            Integer totalWords = levelWordCounts.get(level);
+
+            // 진도율 계산
+            double progress = totalWords > 0 ? Math.round((double) studiedWords / totalWords * 100 * 100.0) / 100.0 : 0.0;
+
+            stat.put("level", level);
+            stat.put("totalWords", totalWords);
+            stat.put("studiedWords", studiedWords);
+            stat.put("progress", progress);
+
+            levelStats.add(stat);
+        }
+
+        return levelStats;
+    }
+
+    /**
+     * 품사별 학습 통계 조회
+     */
+    public List<Map<String, Object>> getPartStats(Long userId, String level) {
+        List<Map<String, Object>> partStats = new ArrayList<>();
+
+        String[] parts = {"명사", "형용사", "형용동사", "동사"};
+        Map<String, Integer> partWordCounts = Map.of(
+                "명사", 120, "형용사", 80, "형용동사", 60, "동사", 150
+        );
+
+        for (String part : parts) {
+            Map<String, Object> stat = new HashMap<>();
+
+            // 해당 품사의 학습한 단어 수
+            Long studiedWords = wordStudyResultRepository.countDistinctWordsByUserIdAndLevelAndPart(userId, level, part);
+
+            // 전체 단어 수
+            Integer totalWords = partWordCounts.get(part);
+
+            // 진도율 계산
+            double progress = totalWords > 0 ? Math.round((double) studiedWords / totalWords * 100 * 100.0) / 100.0 : 0.0;
+
+            stat.put("part", part);
+            stat.put("totalWords", totalWords);
+            stat.put("studiedWords", studiedWords);
+            stat.put("progress", progress);
+
+            partStats.add(stat);
+        }
+
+        return partStats;
+    }
+
+    /**
+     * 연속 학습 일수 계산
+     */
+    private int calculateConsecutiveDays(Long userId) {
+        LocalDate today = LocalDate.now();
+        LocalDate checkDate = today;
+        int consecutiveDays = 0;
+
+        while (true) {
+            boolean studiedOnDate = studyRecordRepository.existsByUserIdAndStudyDate(userId, checkDate);
+
+            if (studiedOnDate) {
+                consecutiveDays++;
+                checkDate = checkDate.minusDays(1);
+            } else {
+                break;
+            }
+        }
+
+        return consecutiveDays;
     }
 }

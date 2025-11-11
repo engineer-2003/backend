@@ -6,7 +6,7 @@ import com.engineer_2003.backend.entity.StudySession;
 import com.engineer_2003.backend.entity.WordStudyResult;
 import com.engineer_2003.backend.service.StudyRecordService;
 import com.engineer_2003.backend.service.WordService;
-import com.engineer_2003.backend.security.AuthUtils; // AuthUtils 사용
+import com.engineer_2003.backend.security.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +22,7 @@ import java.util.HashMap;
 @RestController
 @RequestMapping("/study")
 @CrossOrigin(origins = "http://localhost:5173")
-public class StudyController { // 클래스명 변경
+public class StudyController {
     private static final Logger logger = LoggerFactory.getLogger(StudyController.class);
 
     @Autowired
@@ -32,7 +32,74 @@ public class StudyController { // 클래스명 변경
     private StudyRecordService studyRecordService;
 
     @Autowired
-    private AuthUtils authUtils; // AuthUtils 주입
+    private AuthUtils authUtils;
+
+    /**
+     * 전체 학습 통계 조회
+     */
+    @GetMapping("/stats/overview")
+    public ResponseEntity<Map<String, Object>> getOverviewStats(
+            @RequestHeader("Authorization") String authHeader) {
+
+        logger.info("전체 학습 통계 조회 요청");
+
+        try {
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
+            Map<String, Object> stats = studyRecordService.getOverviewStats(userId);
+
+            logger.info("전체 학습 통계 조회 성공 - 사용자 ID: {}", userId);
+            return ResponseEntity.ok(stats);
+
+        } catch (Exception e) {
+            logger.error("전체 학습 통계 조회 중 오류 발생", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 급수별 학습 통계 조회
+     */
+    @GetMapping("/stats/level")
+    public ResponseEntity<List<Map<String, Object>>> getLevelStats(
+            @RequestHeader("Authorization") String authHeader) {
+
+        logger.info("급수별 학습 통계 조회 요청");
+
+        try {
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
+            List<Map<String, Object>> stats = studyRecordService.getLevelStats(userId);
+
+            logger.info("급수별 학습 통계 조회 성공 - 사용자 ID: {}", userId);
+            return ResponseEntity.ok(stats);
+
+        } catch (Exception e) {
+            logger.error("급수별 학습 통계 조회 중 오류 발생", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 품사별 학습 통계 조회
+     */
+    @GetMapping("/stats/part")
+    public ResponseEntity<List<Map<String, Object>>> getPartStats(
+            @RequestParam String level,
+            @RequestHeader("Authorization") String authHeader) {
+
+        logger.info("품사별 학습 통계 조회 요청 - 레벨: {}", level);
+
+        try {
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
+            List<Map<String, Object>> stats = studyRecordService.getPartStats(userId, level);
+
+            logger.info("품사별 학습 통계 조회 성공 - 사용자 ID: {}, 레벨: {}", userId, level);
+            return ResponseEntity.ok(stats);
+
+        } catch (Exception e) {
+            logger.error("품사별 학습 통계 조회 중 오류 발생", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 
     @GetMapping
     public ResponseEntity<List<WordDto>> getWords(
@@ -42,7 +109,6 @@ public class StudyController { // 클래스명 변경
         logger.info("단어 목록 요청 - 레벨: {}, 품사: {}", level, part);
 
         try {
-            // 입력값 검증
             if (level == null || level.trim().isEmpty() || part == null || part.trim().isEmpty()) {
                 logger.warn("레벨 또는 품사가 제공되지 않음");
                 return ResponseEntity.badRequest().build();
@@ -91,9 +157,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 예문 기반 문제 생성 API
-     */
     @GetMapping("/{id}/sentence-problem")
     public ResponseEntity<Map<String, Object>> generateSentenceProblem(@PathVariable Long id) {
         logger.info("예문 문제 생성 요청 - 단어 ID: {}", id);
@@ -124,9 +187,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 활용형 문제 생성 API
-     */
     @GetMapping("/{id}/form-problem")
     public ResponseEntity<Map<String, Object>> generateFormProblem(
             @PathVariable Long id,
@@ -168,7 +228,6 @@ public class StudyController { // 클래스명 변경
         logger.info("정답 확인 요청 - 단어 ID: {}", id);
 
         try {
-            // 입력값 검증
             if (id == null || id <= 0) {
                 logger.warn("잘못된 단어 ID: {}", id);
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -179,7 +238,7 @@ public class StudyController { // 클래스명 변경
             String answer = request.get("answer");
             String formType = request.get("formType");
             String studyType = request.get("studyType");
-            String sessionId = request.get("sessionId"); // 세션 ID 추가
+            String sessionId = request.get("sessionId");
 
             if (answer == null || answer.trim().isEmpty()) {
                 logger.warn("답안이 제공되지 않음");
@@ -188,7 +247,6 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
-            // 단어 존재 확인
             WordDto word = wordService.getWordById(id);
             if (word == null) {
                 logger.warn("단어를 찾을 수 없음 - ID: {}", id);
@@ -197,7 +255,6 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
 
-            // 정답 확인 로직
             boolean isCorrect;
             String correctAnswer;
 
@@ -205,7 +262,6 @@ public class StudyController { // 클래스명 변경
                 correctAnswer = word.getWord();
                 String reading = word.getReading();
                 String trimmedAnswer = answer.trim();
-                // 원형 정답 확인: 원형 또는 읽기가 정답인지 확인
                 isCorrect = correctAnswer.equals(trimmedAnswer) || (reading != null && reading.equals(trimmedAnswer));
                 logger.info("활용형 없음, 단어/reading 체크 - 단어 ID: {}, 답안: {}", id, answer);
             } else {
@@ -215,7 +271,6 @@ public class StudyController { // 클래스명 변경
                 logger.info("활용형 체크 - 단어 ID: {}, 활용형: {}, 답안: {}", id, formType, answer);
             }
 
-            // 세션 ID가 있으면 정답/오답 카운트 증가
             if (sessionId != null && !sessionId.trim().isEmpty()) {
                 try {
                     Long sessId = Long.valueOf(sessionId);
@@ -226,10 +281,9 @@ public class StudyController { // 클래스명 변경
                 }
             }
 
-            // 로그인한 사용자인 경우 학습 결과 저장
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 try {
-                    Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+                    Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
                     WordStudyResult.StudyType type;
 
                     if (studyType != null && !studyType.trim().isEmpty()) {
@@ -270,9 +324,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 힌트 생성 (reading의 첫 글자만 보여주기)
-     */
     private String getHint(WordDto word) {
         if (word == null || word.getReading() == null || word.getReading().isEmpty()) {
             return "";
@@ -285,9 +336,6 @@ public class StudyController { // 클래스명 변경
         return "힌트: " + reading.charAt(0) + "...";
     }
 
-    /**
-     * 틀린 단어만 조회하는 API
-     */
     @GetMapping("/incorrect")
     public ResponseEntity<List<WordDto>> getIncorrectWords(
             @RequestParam String level,
@@ -298,8 +346,7 @@ public class StudyController { // 클래스명 변경
         logger.info("틀린 단어 목록 요청 - 레벨: {}, 품사: {}, 타입: {}", level, part, studyType);
 
         try {
-            // JWT 토큰에서 사용자 ID 추출
-            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
 
             WordStudyResult.StudyType type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
             List<WordDto> incorrectWords = studyRecordService.getIncorrectWords(userId, level, part, type);
@@ -313,9 +360,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 틀린 단어 개수 조회
-     */
     @GetMapping("/incorrect/count")
     public ResponseEntity<Map<String, Object>> getIncorrectWordCount(
             @RequestParam String level,
@@ -326,7 +370,6 @@ public class StudyController { // 클래스명 변경
         logger.info("틀린 단어 개수 조회 요청 - 레벨: {}, 품사: {}, 타입: {}", level, part, studyType);
 
         try {
-            // 입력값 검증
             if (level == null || level.trim().isEmpty() || part == null || part.trim().isEmpty() || studyType == null || studyType.trim().isEmpty()) {
                 logger.warn("입력 매개변수 중 누락된 항목이 있음");
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -335,10 +378,9 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
-            // JWT 토큰에서 사용자 ID 추출
             Long userId;
             try {
-                userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+                userId = authUtils.extractUserIdFromAuthHeader(authHeader);
                 logger.info("사용자 ID 추출 성공: {}", userId);
             } catch (Exception tokenError) {
                 logger.error("JWT 토큰 처리 중 오류 발생", tokenError);
@@ -348,7 +390,6 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
             }
 
-            // StudyType enum 변환
             WordStudyResult.StudyType type;
             try {
                 type = WordStudyResult.StudyType.valueOf(studyType.toUpperCase());
@@ -360,7 +401,6 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
-            // 틀린 단어 개수 조회
             Long count = studyRecordService.getIncorrectWordCount(userId, level.trim(), part.trim(), type);
 
             Map<String, Object> response = new HashMap<>();
@@ -378,16 +418,13 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 학습 세션 시작
-     */
     @PostMapping("/session/start")
     public ResponseEntity<Map<String, Object>> startStudySession(
             @RequestBody Map<String, Object> request,
             @RequestHeader("Authorization") String authHeader) {
 
         try {
-            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
             String level = (String) request.get("level");
             String part = (String) request.get("part");
             String studyType = (String) request.get("studyType");
@@ -408,9 +445,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 학습 세션 종료
-     */
     @PostMapping("/session/{sessionId}/end")
     public ResponseEntity<Map<String, Object>> endStudySession(
             @PathVariable Long sessionId,
@@ -421,11 +455,10 @@ public class StudyController { // 클래스명 변경
         logger.info("학습 세션 종료 요청 - 세션 ID: {}", sessionId);
 
         try {
-            // 사용자 ID 인증/추출
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                authUtils.extractUserIdFromAuthHeader(authHeader); // 인증 확인
+                authUtils.extractUserIdFromAuthHeader(authHeader);
             } else if (authToken != null && !authToken.isEmpty()) {
-                authUtils.extractUserIdFromToken(authToken); // 인증 확인
+                authUtils.extractUserIdFromToken(authToken);
             } else {
                 logger.warn("인증 정보가 없음");
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -446,8 +479,6 @@ public class StudyController { // 클래스명 변경
 
             logger.info("학습 결과: 정답={}, 오답={}, 총 문제={}", correctCount, incorrectCount, totalCount);
 
-            // 세션 종료 및 StudyRecord에 기록
-            // studyRecordService에서 세션의 current count를 사용하여 실제 기록을 처리합니다.
             studyRecordService.endStudySession(sessionId, totalCount, correctCount);
 
             Map<String, Object> response = new HashMap<>();
@@ -476,9 +507,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 학습 세션 강제 종료 (뒤로가기 버튼용)
-     */
     @PostMapping("/session/{sessionId}/close")
     public ResponseEntity<Map<String, Object>> closeStudySession(
             @PathVariable Long sessionId,
@@ -487,7 +515,7 @@ public class StudyController { // 클래스명 변경
         logger.info("학습 세션 강제 종료 요청 - 세션 ID: {}", sessionId);
 
         try {
-            authUtils.extractUserIdFromAuthHeader(authHeader); // 인증 확인
+            authUtils.extractUserIdFromAuthHeader(authHeader);
 
             if (sessionId == null || sessionId <= 0) {
                 logger.warn("잘못된 세션 ID: {}", sessionId);
@@ -496,7 +524,6 @@ public class StudyController { // 클래스명 변경
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
-            // 세션을 강제로 종료하고 현재까지의 학습 시간을 기록
             studyRecordService.endStudySessionById(sessionId);
 
             Map<String, Object> response = new HashMap<>();
@@ -520,9 +547,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 학습 기록 조회
-     */
     @GetMapping("/records")
     public ResponseEntity<List<StudyRecordDto>> getStudyRecords(
             @RequestHeader("Authorization") String authHeader) {
@@ -530,7 +554,7 @@ public class StudyController { // 클래스명 변경
         logger.info("학습 기록 조회 요청");
 
         try {
-            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
             List<StudyRecordDto> records = studyRecordService.getStudyRecords(userId);
 
             logger.info("학습 기록 조회 성공 - 사용자 ID: {}, 기록 개수: {}", userId, records.size());
@@ -542,9 +566,6 @@ public class StudyController { // 클래스명 변경
         }
     }
 
-    /**
-     * 개별 학습 결과 저장
-     */
     @PostMapping("/result")
     public ResponseEntity<Map<String, Object>> saveStudyResult(
             @RequestBody Map<String, Object> request,
@@ -553,7 +574,7 @@ public class StudyController { // 클래스명 변경
         logger.info("학습 결과 저장 요청");
 
         try {
-            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader); // AuthUtils 사용
+            Long userId = authUtils.extractUserIdFromAuthHeader(authHeader);
             Long wordId = Long.valueOf(request.get("wordId").toString());
             Boolean isCorrect = (Boolean) request.get("isCorrect");
             String studyType = (String) request.get("studyType");
