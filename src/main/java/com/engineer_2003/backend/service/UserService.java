@@ -84,8 +84,8 @@ public class UserService {
         String resetToken = UUID.randomUUID().toString();
         user.setResetToken(resetToken);
         userRepository.save(user);
-
-        String resetLink = "http://localhost:5173/user/reset-password?token=" + resetToken; // 프론트엔드 경로 업데이트
+        
+        String resetLink = "https://japanese-haru-frontend.onrender.com/user/reset-password?token=" + resetToken;  // 프론트엔드 경로 업데이트
         emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
     }
 
