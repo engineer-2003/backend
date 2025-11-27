@@ -3,14 +3,16 @@ package com.engineer_2003.backend.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping; // GetMapping 추가
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam; // RequestParam 추가
 import org.springframework.web.bind.annotation.RestController;
 
 import com.engineer_2003.backend.dto.GoogleLoginRequestDto;
 import com.engineer_2003.backend.dto.PasswordResetDto;
-import com.engineer_2003.backend.dto.UserRegistrationDto; // DTO 임포트
+import com.engineer_2003.backend.dto.UserRegistrationDto; 
 import com.engineer_2003.backend.service.UserService;
 
 @RestController
@@ -22,6 +24,20 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    // 아이디 중복 확인 API
+    @GetMapping("/check-username")
+    public ResponseEntity<Boolean> checkUsername(@RequestParam String username) {
+        boolean exists = userService.checkUsernameDuplication(username);
+        return ResponseEntity.ok(exists);
+    }
+    
+    // 이메일 중복 확인 API
+    @GetMapping("/check-email")
+    public ResponseEntity<Boolean> checkEmail(@RequestParam String email) {
+        boolean exists = userService.checkEmailDuplication(email);
+        return ResponseEntity.ok(exists);
     }
 
     // 회원가입

@@ -27,11 +27,25 @@ public class UserService {
         this.emailService = emailService;
     }
 
+    //아이디 중복 확인
+    public boolean checkUsernameDuplication(String username) {
+        return userRepository.existsByUsername(username);
+    }
+    
+    // 이메일 중복 확인
+    
+    public boolean checkEmailDuplication(String email) {
+        return userRepository.existsByEmail(email);
+    }
+
     // 회원가입
     @Transactional
     public void registerUser(UserRegistrationDto userDto) {
-        if (userRepository.existsByUsername(userDto.getUsername())) {
+        if (checkUsernameDuplication(userDto.getUsername())) {
             throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+        }
+        if (checkEmailDuplication(userDto.getEmail())) { // 이메일 중복 체크
+             throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
         }
 
         User user = User.builder()
@@ -47,13 +61,14 @@ public class UserService {
     @Transactional
     public String processGoogleLogin(String email) {
         User user = userRepository.findByEmailAndProvider(email, "google");
-
+        // ... (생략)
+        
         if (user == null) {
             // 구글 정보로 신규 회원 생성
             // username은 유니크해야 하므로 이메일 앞부분과 랜덤 문자열을 조합
             String username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
 
-            // 이미 해당 username이 존재할 경우를 대비한 예외 처리 (선택사항)
+            // 이미 해당 username이 존재할 경우를 대비한 예외 처리 
             while (userRepository.existsByUsername(username)) {
                 username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
             }
@@ -76,6 +91,7 @@ public class UserService {
     // 비밀번호 찾기 기능 (토큰 발송)
     @Transactional
     public void findPassword(String username, String email) {
+        // ... (생략)
         User user = userRepository.findByUsernameAndEmail(username, email);
         if (user == null) {
             throw new IllegalArgumentException("아이디 또는 이메일이 잘못되었습니다.");
@@ -92,6 +108,7 @@ public class UserService {
     // 비밀번호 재설정 기능 (새 비밀번호 저장)
     @Transactional
     public void resetPassword(String token, String newPassword) {
+        // ... (생략)
         // 1. 토큰으로 사용자 찾기
         User user = userRepository.findByResetToken(token);
         if (user == null) {
@@ -106,6 +123,7 @@ public class UserService {
 
     // 로그인
     public String login(String username, String password) {
+        // ... (생략)
         User user = userRepository.findByUsername(username);
         if (user != null && passwordEncoder.matches(password, user.getPassword())) { // 암호화된 비밀번호 대조
             return jwtTokenProvider.generateToken(username); // JWT 토큰 생성
@@ -120,6 +138,7 @@ public class UserService {
 
     // 사용자명으로 사용자 ID 조회 (AuthUtils와 별개로 내부 서비스에서 사용)
     public Long getUserIdByUsername(String username) {
+        // ... (생략)
         User user = userRepository.findByUsername(username);
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username);
