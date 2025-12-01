@@ -139,11 +139,14 @@ public class WordService {
             if (word == null) return false;
 
             WordDto wordDto = new WordDto(word);
-            String trimmedAnswer = answer.trim();
+            // 사용자 입력값 공백 제거 및 정규화
+            String trimmedAnswer = answer.trim().replace(" ", "");
 
             // 1. 원형 확인
             if ("word".equals(formType) || "원형".equals(formType)) {
-                return word.getWord().equals(trimmedAnswer) || word.getReading().equals(trimmedAnswer);
+                // 원형 비교 시에도 읽기에서 모든 하이픈 제거 후 비교
+                String cleanReading = word.getReading().replaceAll("[\\-‐−–—]", "");
+                return word.getWord().equals(trimmedAnswer) || cleanReading.equals(trimmedAnswer);
             }
 
             // 2. 활용형 확인
@@ -151,28 +154,33 @@ public class WordService {
                 String correctAnswer = wordDto.getForms().get(formType);
                 if (correctAnswer == null) return false;
 
-                // 2-1. 정확한 일치 (한자 포함)
+                // 2-1. 정확한 일치 (한자 포함 정답)
                 if (correctAnswer.equals(trimmedAnswer)) return true;
 
                 // 2-2. 히라가나 변환 확인 (개선된 로직)
                 if (word.getWord().length() > 0 && word.getReading().length() > 0) {
                     String kanjiWord = word.getWord();      // 예: 赤い
-                    String kanaReading = word.getReading(); // 예: あかい
+
+                    // 읽기 데이터에서 하이픈(-, ‐) 제거
+                    // ASCII Hyphen, Unicode Hyphen, Minus Sign, En Dash, Em Dash 포함
+                    String kanaReading = word.getReading().replaceAll("[\\-‐−–—]", "");
 
                     // 공통 접미사(오쿠리가나) 길이 계산
                     int suffixLength = getCommonSuffixLength(kanjiWord, kanaReading);
 
                     // 어간 추출 (접미사 제외)
-                    // 예: 赤い(suffix "い") -> 어간 "赤"
-                    // 예: あかい(suffix "い") -> 어간 "あか"
                     if (kanjiWord.length() > suffixLength && kanaReading.length() > suffixLength) {
                         String kanjiStem = kanjiWord.substring(0, kanjiWord.length() - suffixLength);
                         String kanaStem = kanaReading.substring(0, kanaReading.length() - suffixLength);
 
                         // 정답 문자열에 한자 어간이 포함되어 있다면, 히라가나 어간으로 치환하여 비교
-                        // 예: 정답 "赤くない" -> "赤"을 "あか"로 치환 -> "あかくない"
                         if (correctAnswer.contains(kanjiStem)) {
                             String pseudoHiraganaAnswer = correctAnswer.replace(kanjiStem, kanaStem);
+
+                            // 디버깅 로그 (문제가 지속될 경우 서버 로그 확인용)
+                            logger.debug("히라가나 변환 체크 - 정답: {}, 변환된 답: {}, 사용자 입력: {}",
+                                    correctAnswer, pseudoHiraganaAnswer, trimmedAnswer);
+
                             if (pseudoHiraganaAnswer.equals(trimmedAnswer)) {
                                 return true;
                             }
