@@ -80,18 +80,14 @@ public class WordService {
 
             WordDto wordDto = new WordDto(word);
 
-            // 동사나 형용사가 아니면 활용형 문제를 생성할 수 없음
             if (!"동사".equals(word.getPartOfSpeech()) && !"형용사".equals(word.getPartOfSpeech())) {
                 return null;
             }
 
             String selectedForm;
-
-            // formType이 지정되어 있고 유효하다면 그 활용형을 선택
             if (formType != null && !formType.trim().isEmpty() && wordDto.getForms().containsKey(formType)) {
                 selectedForm = formType;
             } else {
-                // formType이 없으면 기존처럼 랜덤 선택
                 List<String> availableForms = getAvailableForms(wordId);
                 if (availableForms.isEmpty()) return null;
                 Random random = new Random();
@@ -145,37 +141,66 @@ public class WordService {
             WordDto wordDto = new WordDto(word);
             String trimmedAnswer = answer.trim();
 
+            // 1. 원형 확인
             if ("word".equals(formType) || "원형".equals(formType)) {
                 return word.getWord().equals(trimmedAnswer) || word.getReading().equals(trimmedAnswer);
             }
 
+            // 2. 활용형 확인
             if (wordDto.getForms().containsKey(formType)) {
                 String correctAnswer = wordDto.getForms().get(formType);
                 if (correctAnswer == null) return false;
 
+                // 2-1. 정확한 일치 (한자 포함)
                 if (correctAnswer.equals(trimmedAnswer)) return true;
 
+                // 2-2. 히라가나 변환 확인 (개선된 로직)
                 if (word.getWord().length() > 0 && word.getReading().length() > 0) {
-                    char firstKanji = word.getWord().charAt(0);
-                    char firstKana = word.getReading().charAt(0);
+                    String kanjiWord = word.getWord();      // 예: 赤い
+                    String kanaReading = word.getReading(); // 예: あかい
 
-                    if (correctAnswer.charAt(0) == firstKanji && isKanji(firstKanji)) {
-                        String pseudoHiraganaAnswer = correctAnswer.replaceFirst(
-                                String.valueOf(firstKanji),
-                                String.valueOf(firstKana)
-                        );
-                        if (pseudoHiraganaAnswer.equals(trimmedAnswer)) return true;
+                    // 공통 접미사(오쿠리가나) 길이 계산
+                    int suffixLength = getCommonSuffixLength(kanjiWord, kanaReading);
+
+                    // 어간 추출 (접미사 제외)
+                    // 예: 赤い(suffix "い") -> 어간 "赤"
+                    // 예: あかい(suffix "い") -> 어간 "あか"
+                    if (kanjiWord.length() > suffixLength && kanaReading.length() > suffixLength) {
+                        String kanjiStem = kanjiWord.substring(0, kanjiWord.length() - suffixLength);
+                        String kanaStem = kanaReading.substring(0, kanaReading.length() - suffixLength);
+
+                        // 정답 문자열에 한자 어간이 포함되어 있다면, 히라가나 어간으로 치환하여 비교
+                        // 예: 정답 "赤くない" -> "赤"을 "あか"로 치환 -> "あかくない"
+                        if (correctAnswer.contains(kanjiStem)) {
+                            String pseudoHiraganaAnswer = correctAnswer.replace(kanjiStem, kanaStem);
+                            if (pseudoHiraganaAnswer.equals(trimmedAnswer)) {
+                                return true;
+                            }
+                        }
                     }
                 }
             }
             return false;
         } catch (Exception e) {
+            logger.error("정답 확인 중 오류 발생", e);
             return false;
         }
     }
 
-    private boolean isKanji(char c) {
-        return (c >= 0x4E00 && c <= 0x9FBF);
+    // 공통 접미사(오쿠리가나) 길이 계산 헬퍼 메서드
+    private int getCommonSuffixLength(String s1, String s2) {
+        int l1 = s1.length();
+        int l2 = s2.length();
+        int minLen = Math.min(l1, l2);
+        int suffixLen = 0;
+
+        for (int i = 1; i <= minLen; i++) {
+            if (s1.charAt(l1 - i) != s2.charAt(l2 - i)) {
+                break;
+            }
+            suffixLen++;
+        }
+        return suffixLen;
     }
 
     public String getCorrectAnswer(Long wordId, String formType) {
@@ -211,7 +236,6 @@ public class WordService {
     private String getFormDisplayName(String formType) {
         Map<String, String> formNames = new HashMap<>();
 
-        // 동사
         formNames.put("masuForm", "ます형");
         formNames.put("negativeForm", "부정형");
         formNames.put("volitionalForm", "청유형");
@@ -219,7 +243,6 @@ public class WordService {
         formNames.put("imperativeForm", "명령형");
         formNames.put("potentialForm", "가능형");
 
-        // 형용사
         formNames.put("mizenForm", "미연형");
         formNames.put("teForm", "て형");
         formNames.put("pastForm", "과거형");
