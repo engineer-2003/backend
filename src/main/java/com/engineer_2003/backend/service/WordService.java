@@ -1,4 +1,3 @@
-// WordService.java
 package com.engineer_2003.backend.service;
 
 import com.engineer_2003.backend.dto.WordDto;
@@ -22,142 +21,72 @@ public class WordService {
     private WordRepository wordRepository;
 
     public List<WordDto> getWordsByLevelAndPart(String levelName, String partOfSpeech) {
-        logger.debug("단어 조회 시작 - 레벨: {}, 품사: {}", levelName, partOfSpeech);
-
+        // 기존 로직 유지 (WordDto 생성 시 LinkedHashMap으로 순서 보장됨)
         try {
             List<Word> words = wordRepository.findWordsWithFormsbyLevelAndPart(levelName, partOfSpeech);
-            logger.debug("DB에서 조회된 단어 수: {}", words.size());
-
             List<WordDto> wordDtos = words.stream()
                     .map(word -> {
-                        try {
-                            return new WordDto(word);
-                        } catch (Exception e) {
-                            logger.warn("WordDto 변환 실패 - 단어 ID: {}", word.getId(), e);
-                            return null;
-                        }
+                        try { return new WordDto(word); }
+                        catch (Exception e) { return null; }
                     })
-                    .filter(dto -> dto != null) // null인 항목 제거
-                    // ------ 이 부분 수정 --------
-                    // 품사가 명사가 아니고, 활용형이 있어야 하는 경우에만 활용형 필터를 적용
+                    .filter(Objects::nonNull)
                     .filter(dto -> {
                         if (("동사".equals(partOfSpeech) || "형용사".equals(partOfSpeech))) {
-                            // 동사 또는 형용사일 경우 활용형이 비어있으면 필터링
                             return dto.getForms() != null && !dto.getForms().isEmpty();
-                        } else {
-                            // 그 외 품사 (명사 등)는 활용형 필터 적용 없이 통과
-                            return true;
                         }
+                        return true;
                     })
-                    // -----------------------------
                     .collect(Collectors.toList());
 
-            logger.debug("변환된 WordDto 수: {}", wordDtos.size());
-
-            // 랜덤하게 섞기
-            Collections.shuffle(wordDtos);
-
-            logger.info("단어 목록 조회 완료 - 레벨: {}, 품사: {}, 반환 개수: {}",
-                    levelName, partOfSpeech, wordDtos.size());
-
+            Collections.shuffle(wordDtos); // 단어 순서는 섞지만, 내부 활용형 순서는 WordDto에서 보장됨
             return wordDtos;
-
         } catch (Exception e) {
-            logger.error("단어 목록 조회 중 오류 발생 - 레벨: {}, 품사: {}", levelName, partOfSpeech, e);
             throw new RuntimeException("단어 목록 조회 실패", e);
         }
     }
 
     public WordDto getWordById(Long id) {
-        logger.debug("단어 조회 - ID: {}", id);
-
-        try {
-            Word word = wordRepository.findWordWithFormsById(id);
-
-            if (word == null) {
-                logger.info("단어를 찾을 수 없음 - ID: {}", id);
-                return null;
-            }
-
-            WordDto wordDto = new WordDto(word);
-            logger.debug("단어 조회 성공 - ID: {}, 단어: {}", id, word.getWord());
-
-            return wordDto;
-
-        } catch (Exception e) {
-            logger.error("단어 조회 중 오류 발생 - ID: {}", id, e);
-            throw new RuntimeException("단어 조회 실패", e);
-        }
+        // 기존 로직 유지
+        Word word = wordRepository.findWordWithFormsById(id);
+        return word != null ? new WordDto(word) : null;
     }
 
-    /**
-     * 예문 기반 문제 생성
-     */
     public Map<String, Object> generateSentenceProblem(Long wordId) {
-        logger.debug("예문 문제 생성 - 단어 ID: {}", wordId);
-
         try {
             Word word = wordRepository.findWordWithFormsById(wordId);
-            if (word == null) {
-                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
-                return null;
-            }
+            if (word == null) return null;
 
             Map<String, Object> problem = new HashMap<>();
-
-            // 기본 정보
             problem.put("id", word.getId());
             problem.put("meaning", word.getMeaning());
             problem.put("exampleTranslation", word.getExampleTranslation());
             problem.put("level", word.getLevelName());
             problem.put("part", word.getPartOfSpeech());
 
-            // 예문에서 빈칸 만들기
+            // 수정: 한자와 읽기 모두 빈칸으로 처리
             String blankSentence = createBlankSentence(word.getExampleSentence(), word.getWord(), word.getReading());
             problem.put("blankSentence", blankSentence);
 
-            // 정답은 원형
+            // 정답 목록에 원형과 읽기 모두 포함
             problem.put("correctAnswers", Arrays.asList(word.getWord(), word.getReading()));
             problem.put("hint", getHint(word.getReading()));
 
-            logger.debug("예문 문제 생성 완료 - 단어 ID: {}", wordId);
             return problem;
-
         } catch (Exception e) {
-            logger.error("예문 문제 생성 중 오류 발생 - 단어 ID: {}", wordId, e);
             return null;
         }
     }
 
-    /**
-     * 활용형 문제 생성
-     */
     public Map<String, Object> generateFormProblem(Long wordId) {
-        logger.debug("활용형 문제 생성 - 단어 ID: {}", wordId);
-
         try {
             Word word = wordRepository.findWordWithFormsById(wordId);
-            if (word == null) {
-                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
-                return null;
-            }
+            if (word == null) return null;
 
             WordDto wordDto = new WordDto(word);
-
-            // 동사나 형용사가 아니면 활용형 문제를 생성할 수 없음
-            if (!"동사".equals(word.getPartOfSpeech()) && !"형용사".equals(word.getPartOfSpeech())) {
-                logger.warn("활용형이 없는 품사 - 단어 ID: {}, 품사: {}", wordId, word.getPartOfSpeech());
-                return null;
-            }
-
-            // 사용 가능한 활용형 목록 가져오기
             List<String> availableForms = getAvailableForms(wordId);
-            if (availableForms.isEmpty()) {
-                logger.warn("사용 가능한 활용형이 없음 - 단어 ID: {}", wordId);
-                return null;
-            }
+            if (availableForms.isEmpty()) return null;
 
-            // 랜덤하게 활용형 선택
+            // 랜덤하게 문제 출제 (학습 페이지에서는 프론트가 순서대로 요청하므로 이 메서드는 단일 조회용)
             Random random = new Random();
             String selectedForm = availableForms.get(random.nextInt(availableForms.size()));
             String correctAnswer = wordDto.getForms().get(selectedForm);
@@ -174,22 +103,117 @@ public class WordService {
             problem.put("correctAnswer", correctAnswer);
             problem.put("hint", getHint(correctAnswer));
 
-            logger.debug("활용형 문제 생성 완료 - 단어 ID: {}, 활용형: {}", wordId, selectedForm);
             return problem;
-
         } catch (Exception e) {
-            logger.error("활용형 문제 생성 중 오류 발생 - 단어 ID: {}", wordId, e);
             return null;
         }
     }
 
-    /**
-     * 활용형의 표시명 반환
-     */
+    // 수정: 한자와 읽기 모두 확실하게 빈칸으로 치환
+    private String createBlankSentence(String sentence, String word, String reading) {
+        if (sentence == null || sentence.trim().isEmpty()) return "例文がありません。";
+
+        String blankSentence = sentence;
+        // 한자 단어 치환
+        if (word != null && !word.trim().isEmpty()) {
+            blankSentence = blankSentence.replace(word, "（　）");
+        }
+        // 읽기(히라가나) 치환 (예: 단어가 한자로 되어있지 않고 히라가나로만 예문에 쓰인 경우 대비)
+        if (reading != null && !reading.trim().isEmpty()) {
+            blankSentence = blankSentence.replace(reading, "（　）");
+        }
+        return blankSentence;
+    }
+
+    private String getHint(String answer) {
+        if (answer == null || answer.isEmpty()) return "";
+        return answer.length() == 1 ? "힌트: " + answer : "힌트: " + answer.charAt(0) + "...";
+    }
+
+    // 수정: 히라가나/한자 모두 정답 인정 로직 강화
+    public boolean checkAnswer(Long wordId, String answer, String formType) {
+        try {
+            Word word = wordRepository.findWordWithFormsById(wordId);
+            if (word == null) return false;
+
+            WordDto wordDto = new WordDto(word);
+            String trimmedAnswer = answer.trim();
+
+            // 1. 원형(예문) 학습 확인
+            if ("word".equals(formType) || "원형".equals(formType)) {
+                return word.getWord().equals(trimmedAnswer) || word.getReading().equals(trimmedAnswer);
+            }
+
+            // 2. 활용형 학습 확인
+            if (wordDto.getForms().containsKey(formType)) {
+                String correctAnswer = wordDto.getForms().get(formType);
+                if (correctAnswer == null) return false;
+
+                // 2-1. 정확히 일치하는 경우 (한자 정답)
+                if (correctAnswer.equals(trimmedAnswer)) return true;
+
+                // 2-2. 히라가나 변환 시도 (휴리스틱)
+                // DB 정답이 한자(예: 食べます)인데 사용자 입력이 히라가나(예: たべます)인 경우 처리
+                if (word.getWord().length() > 0 && word.getReading().length() > 0) {
+                    char firstKanji = word.getWord().charAt(0);
+                    char firstKana = word.getReading().charAt(0);
+
+                    // 정답이 해당 단어의 첫 한자로 시작하고, 그 한자가 실제 한자 범위인 경우
+                    if (correctAnswer.charAt(0) == firstKanji && isKanji(firstKanji)) {
+                        // 정답 문자열의 첫 한자를 단어의 첫 읽기(히라가나)로 치환하여 비교
+                        // 예: "食べます" -> "た" + "べます" = "たべます"
+                        String pseudoHiraganaAnswer = correctAnswer.replaceFirst(
+                                String.valueOf(firstKanji),
+                                String.valueOf(firstKana)
+                        );
+
+                        if (pseudoHiraganaAnswer.equals(trimmedAnswer)) return true;
+                    }
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isKanji(char c) {
+        return (c >= 0x4E00 && c <= 0x9FBF);
+    }
+
+    public String getCorrectAnswer(Long wordId, String formType) {
+        try {
+            Word word = wordRepository.findWordWithFormsById(wordId);
+            if (word == null) return "";
+            WordDto wordDto = new WordDto(word);
+
+            if ("word".equals(formType) || "원형".equals(formType)) {
+                return word.getWord(); // 대표 정답은 원형으로
+            }
+            if (wordDto.getForms().containsKey(formType)) {
+                return wordDto.getForms().get(formType);
+            }
+            return "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public List<String> getAvailableForms(Long wordId) {
+        try {
+            Word word = wordRepository.findWordWithFormsById(wordId);
+            if (word == null) return Collections.emptyList();
+
+            // WordDto 생성 시 LinkedHashMap을 사용했으므로 여기서 keySet 순서가 보장됨
+            WordDto wordDto = new WordDto(word);
+            return new ArrayList<>(wordDto.getForms().keySet());
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
     private String getFormDisplayName(String formType) {
         Map<String, String> formNames = new HashMap<>();
-
-        // 동사 활용형
         formNames.put("masuForm", "ます형");
         formNames.put("negativeForm", "부정형");
         formNames.put("volitionalForm", "의지형");
@@ -202,144 +226,10 @@ public class WordService {
         formNames.put("presentForm", "현재형");
         formNames.put("causativeForm", "사역형");
         formNames.put("passiveForm", "수동형");
-
-        // 형용사 활용형
         formNames.put("mizenForm", "미연형");
         formNames.put("politeForm", "정중형");
         formNames.put("adverbialForm", "부사형");
         formNames.put("nounForm", "명사형");
-
         return formNames.getOrDefault(formType, formType);
-    }
-
-    /**
-     * 예문에서 빈칸 만들기 (백엔드에서 처리)
-     */
-    private String createBlankSentence(String sentence, String word, String reading) {
-        if (sentence == null || sentence.trim().isEmpty()) {
-            return "例文がありません。";
-        }
-
-        String blankSentence = sentence;
-
-        // 한자 형태의 단어를 빈칸으로
-        if (word != null && !word.trim().isEmpty()) {
-            blankSentence = blankSentence.replace(word, "（　）");
-        }
-
-        // 히라가나 읽기도 빈칸으로 (아직 빈칸이 안 된 경우)
-        if (reading != null && !reading.trim().isEmpty() && !blankSentence.contains("（　）")) {
-            blankSentence = blankSentence.replace(reading, "（　）");
-        }
-
-        return blankSentence;
-    }
-
-    /**
-     * 힌트 생성
-     */
-    private String getHint(String answer) {
-        if (answer == null || answer.isEmpty()) {
-            return "";
-        }
-
-        if (answer.length() == 1) {
-            return "힌트: " + answer;
-        }
-        return "힌트: " + answer.charAt(0) + "...";
-    }
-
-    public boolean checkAnswer(Long wordId, String answer, String formType) {
-        logger.debug("정답 확인 - 단어 ID: {}, 활용형: {}, 답안: {}", wordId, formType, answer);
-
-        try {
-            Word word = wordRepository.findWordWithFormsById(wordId);
-            if (word == null) {
-                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
-                return false;
-            }
-
-            WordDto wordDto = new WordDto(word);
-
-            // 기본 단어 확인 (원형)
-            if ("word".equals(formType) || "원형".equals(formType)) {
-                boolean isCorrect = word.getWord().equals(answer) || word.getReading().equals(answer);
-                logger.debug("원형 정답 확인 결과: {} (단어: {}, 읽기: {}, 답안: {})",
-                        isCorrect, word.getWord(), word.getReading(), answer);
-                return isCorrect;
-            }
-
-            // 활용형 확인
-            if (wordDto.getForms().containsKey(formType)) {
-                String correctAnswer = wordDto.getForms().get(formType);
-                boolean isCorrect = correctAnswer != null && correctAnswer.equals(answer);
-
-                logger.debug("활용형 정답 확인 결과: {} (정답: {}, 답안: {})",
-                        isCorrect, correctAnswer, answer);
-                return isCorrect;
-            }
-
-            logger.warn("지원하지 않는 활용형 타입: {} (단어 ID: {})", formType, wordId);
-            return false;
-
-        } catch (Exception e) {
-            logger.error("정답 확인 중 오류 발생 - 단어 ID: {}", wordId, e);
-            return false;
-        }
-    }
-
-    /**
-     * 정답을 반환하는 메서드 (힌트나 정답 표시용)
-     */
-    public String getCorrectAnswer(Long wordId, String formType) {
-        logger.debug("정답 조회 - 단어 ID: {}, 활용형: {}", wordId, formType);
-
-        try {
-            Word word = wordRepository.findWordWithFormsById(wordId);
-            if (word == null) {
-                logger.warn("단어를 찾을 수 없음 - ID: {}", wordId);
-                return "";
-            }
-
-            WordDto wordDto = new WordDto(word);
-
-            // 기본 단어 반환
-            if ("word".equals(formType) || "원형".equals(formType)) {
-                return word.getWord();
-            }
-
-            // 활용형 반환
-            if (wordDto.getForms().containsKey(formType)) {
-                return wordDto.getForms().get(formType);
-            }
-
-            logger.warn("지원하지 않는 활용형 타입: {} (단어 ID: {})", formType, wordId);
-            return "";
-
-        } catch (Exception e) {
-            logger.error("정답 조회 중 오류 발생 - 단어 ID: {}", wordId, e);
-            return "";
-        }
-    }
-
-    /**
-     * 특정 단어의 활용형 목록 조회
-     */
-    public List<String> getAvailableForms(Long wordId) {
-        try {
-            Word word = wordRepository.findWordWithFormsById(wordId);
-            if (word == null) {
-                return Collections.emptyList();
-            }
-
-            WordDto wordDto = new WordDto(word);
-            return wordDto.getForms().keySet().stream()
-                    .filter(key -> wordDto.getForms().get(key) != null && !wordDto.getForms().get(key).isEmpty())
-                    .collect(Collectors.toList());
-
-        } catch (Exception e) {
-            logger.error("활용형 목록 조회 중 오류 발생 - 단어 ID: {}", wordId, e);
-            return Collections.emptyList();
-        }
     }
 }

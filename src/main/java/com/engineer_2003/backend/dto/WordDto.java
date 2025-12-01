@@ -5,7 +5,7 @@ import com.engineer_2003.backend.entity.AdjectiveForm;
 import com.engineer_2003.backend.entity.VerbForm;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WordDto {
@@ -20,7 +20,7 @@ public class WordDto {
     private Map<String, String> forms;
 
     public WordDto() {
-        this.forms = new HashMap<>();
+        this.forms = new LinkedHashMap<>();
     }
 
     public WordDto(Word word) {
@@ -32,34 +32,39 @@ public class WordDto {
         this.meaning = word.getMeaning();
         this.exampleSentence = word.getExampleSentence();
         this.exampleTranslation = word.getExampleTranslation();
-        this.forms = new HashMap<>();
+        this.forms = new LinkedHashMap<>();
 
-        // 형용사 활용형 추가 (null 체크 강화)
+        // 형용사 활용형
         if (word.getAdjectiveForms() != null && !word.getAdjectiveForms().isEmpty()) {
             AdjectiveForm adjForm = word.getAdjectiveForms().iterator().next();
             if (adjForm != null) {
-                addFormIfNotEmpty("미연형", adjForm.getMizenForm());
-                addFormIfNotEmpty("부정형", adjForm.getNegativeForm());
-                addFormIfNotEmpty("て형", adjForm.getTeForm());
-                addFormIfNotEmpty("과거형", adjForm.getPastForm());
-                addFormIfNotEmpty("가정형", adjForm.getConditionalForm());
-                addFormIfNotEmpty("정중형", adjForm.getPoliteForm());
+                addFormIfNotEmpty("politeForm", adjForm.getPoliteForm());       // 정중형 (です)
+                addFormIfNotEmpty("negativeForm", adjForm.getNegativeForm());   // 부정형 (ない)
+                addFormIfNotEmpty("pastForm", adjForm.getPastForm());           // 과거형 (た)
+                addFormIfNotEmpty("teForm", adjForm.getTeForm());               // て형
+                addFormIfNotEmpty("conditionalForm", adjForm.getConditionalForm()); // 가정형 (ば)
+                addFormIfNotEmpty("mizenForm", adjForm.getMizenForm());         // 미연형
+                addFormIfNotEmpty("adverbialForm", adjForm.getAdverbialForm()); // 부사형 (く)
+                addFormIfNotEmpty("nounForm", adjForm.getNounForm());           // 명사형 (さ)
             }
         }
 
-        // 동사 활용형 추가 (null 체크 강화)
+        // 동사 활용형
         if (word.getVerbForms() != null && !word.getVerbForms().isEmpty()) {
             VerbForm verbForm = word.getVerbForms().iterator().next();
             if (verbForm != null) {
-                addFormIfNotEmpty("ます형", verbForm.getMasuForm());
-                addFormIfNotEmpty("부정형", verbForm.getNegativeForm());
-                addFormIfNotEmpty("청유형", verbForm.getVolitionalForm());
-                addFormIfNotEmpty("가정형", verbForm.getConditionalForm());
-                addFormIfNotEmpty("명령형", verbForm.getImperativeForm());
-                addFormIfNotEmpty("가능형", verbForm.getPotentialForm());
-                addFormIfNotEmpty("て형", verbForm.getTeForm());
-                addFormIfNotEmpty("た형", verbForm.getTaForm());
-                addFormIfNotEmpty("과거형", verbForm.getPastForm());
+                addFormIfNotEmpty("masuForm", verbForm.getMasuForm());          // ます형
+                addFormIfNotEmpty("teForm", verbForm.getTeForm());              // て형
+                addFormIfNotEmpty("taForm", verbForm.getTaForm());              // た형 (과거)
+                addFormIfNotEmpty("negativeForm", verbForm.getNegativeForm());  // 부정형 (ない)
+                addFormIfNotEmpty("potentialForm", verbForm.getPotentialForm());// 가능형
+                addFormIfNotEmpty("volitionalForm", verbForm.getVolitionalForm());// 의지형
+                addFormIfNotEmpty("imperativeForm", verbForm.getImperativeForm());// 명령형
+                addFormIfNotEmpty("conditionalForm", verbForm.getConditionalForm());// 가정형 (ば)
+                addFormIfNotEmpty("passiveForm", verbForm.getPassiveForm());    // 수동형
+                addFormIfNotEmpty("causativeForm", verbForm.getCausativeForm());// 사역형
+                addFormIfNotEmpty("presentForm", verbForm.getPresentForm());    // 현재형(사전형)
+                addFormIfNotEmpty("pastForm", verbForm.getPastForm());          // 과거형(일반)
             }
         }
     }
