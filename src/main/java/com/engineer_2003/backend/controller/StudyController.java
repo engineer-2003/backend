@@ -199,7 +199,8 @@ public class StudyController {
                 return ResponseEntity.badRequest().build();
             }
 
-            Map<String, Object> problem = wordService.generateFormProblem(id);
+            // wordService.generateFormProblem 호출 시 formType 전달
+            Map<String, Object> problem = wordService.generateFormProblem(id, formType);
 
             if (problem == null || problem.isEmpty()) {
                 logger.warn("활용형 문제 생성 실패 - 단어 ID: {}", id);

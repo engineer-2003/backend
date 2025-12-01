@@ -73,17 +73,31 @@ public class WordService {
         }
     }
 
-    public Map<String, Object> generateFormProblem(Long wordId) {
+    public Map<String, Object> generateFormProblem(Long wordId, String formType) {
         try {
             Word word = wordRepository.findWordWithFormsById(wordId);
             if (word == null) return null;
 
             WordDto wordDto = new WordDto(word);
-            List<String> availableForms = getAvailableForms(wordId);
-            if (availableForms.isEmpty()) return null;
 
-            Random random = new Random();
-            String selectedForm = availableForms.get(random.nextInt(availableForms.size()));
+            // 동사나 형용사가 아니면 활용형 문제를 생성할 수 없음
+            if (!"동사".equals(word.getPartOfSpeech()) && !"형용사".equals(word.getPartOfSpeech())) {
+                return null;
+            }
+
+            String selectedForm;
+
+            // formType이 지정되어 있고 유효하다면 그 활용형을 선택
+            if (formType != null && !formType.trim().isEmpty() && wordDto.getForms().containsKey(formType)) {
+                selectedForm = formType;
+            } else {
+                // formType이 없으면 기존처럼 랜덤 선택
+                List<String> availableForms = getAvailableForms(wordId);
+                if (availableForms.isEmpty()) return null;
+                Random random = new Random();
+                selectedForm = availableForms.get(random.nextInt(availableForms.size()));
+            }
+
             String correctAnswer = wordDto.getForms().get(selectedForm);
 
             Map<String, Object> problem = new HashMap<>();
@@ -100,6 +114,7 @@ public class WordService {
 
             return problem;
         } catch (Exception e) {
+            logger.error("활용형 문제 생성 중 오류 발생 - 단어 ID: {}", wordId, e);
             return null;
         }
     }
