@@ -18,6 +18,7 @@ public class WordDto {
     private String exampleSentence;
     private String exampleTranslation;
     private Map<String, String> forms;
+    private Integer incorrectCount = 0;
 
     public WordDto() {
         this.forms = new HashMap<>();
@@ -33,6 +34,7 @@ public class WordDto {
         this.exampleSentence = word.getExampleSentence();
         this.exampleTranslation = word.getExampleTranslation();
         this.forms = new HashMap<>();
+        this.incorrectCount = 0;
 
         // 형용사 활용형 추가 (null 체크 강화)
         if (word.getAdjectiveForms() != null && !word.getAdjectiveForms().isEmpty()) {
@@ -101,6 +103,9 @@ public class WordDto {
     public Map<String, String> getForms() { return forms; }
     public void setForms(Map<String, String> forms) { this.forms = forms; }
 
+    public Integer getIncorrectCount() { return incorrectCount; }
+    public void setIncorrectCount(Integer incorrectCount) { this.incorrectCount = incorrectCount; }
+
     @Override
     public String toString() {
         return "WordDto{" +
@@ -109,6 +114,7 @@ public class WordDto {
                 ", reading='" + reading + '\'' +
                 ", meaning='" + meaning + '\'' +
                 ", forms=" + forms +
+                ", incorrectCount=" + incorrectCount +
                 '}';
     }
 }

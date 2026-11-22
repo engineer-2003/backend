@@ -17,4 +17,5 @@ public class StudyRecordDto {
     private Integer wordCount;
     private Integer studyTime; // 초 단위
     private String studyDuration; // "n시간 n분 n초" 형태(문자열)
+    private Integer correctCount;
 }

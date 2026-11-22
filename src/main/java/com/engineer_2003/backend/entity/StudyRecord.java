@@ -39,6 +39,10 @@ public class StudyRecord {
     @Column(name = "study_date", nullable = false)
     private LocalDate studyDate;
 
+    @Column(name = "correct_count", nullable = false)
+    @Builder.Default
+    private Integer correctCount = 0;
+
     @Builder.Default // 경고 해결
     @Column(name = "study_type", nullable = false)
     @Enumerated(EnumType.STRING)

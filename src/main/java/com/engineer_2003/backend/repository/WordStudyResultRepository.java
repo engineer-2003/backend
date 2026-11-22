@@ -15,6 +15,9 @@ public interface WordStudyResultRepository extends JpaRepository<WordStudyResult
     Optional<WordStudyResult> findByUserIdAndWordIdAndStudyType(
             Long userId, Long wordId, WordStudyResult.StudyType studyType);
 
+    List<WordStudyResult> findByUserIdAndStudyType(
+            Long userId, WordStudyResult.StudyType studyType);
+
     @Query("SELECT wsr FROM WordStudyResult wsr " +
             "JOIN FETCH wsr.word w " +
             "WHERE wsr.userId = :userId " +

@@ -37,6 +37,10 @@ public class WordStudyResult {
     private Integer attemptCount = 1;
 
     @Builder.Default
+    @Column(name = "incorrect_count", nullable = false)
+    private Integer incorrectCount = 0;
+
+    @Builder.Default
     @Column(name = "last_studied_at")
     private LocalDateTime lastStudiedAt = LocalDateTime.now();
 

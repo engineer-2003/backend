@@ -19,7 +19,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -131,11 +133,11 @@ public class StudyRecordService {
         logger.info("학습 시간 계산 - 세션 ID: {}, 시작: {}, 종료: {}, 소요시간: {}초",
                 sessionId, session.getStartTime(), endTime, studyTimeSeconds);
 
-        // StudyRecord에 실시간 카운트를 기반으로 저장
+        // StudyRecord에 실시간 카운트를 기반으로 저장 (정답 수 포함)
         try {
             if (actualQuestions > 0) {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                        actualQuestions, (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
+                        actualQuestions, actualCorrect, (int) studyTimeSeconds, convertStudyType(session.getStudyType()));
                 logger.info("StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                         session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
                         session.getCurrentIncorrectCount());
@@ -172,8 +174,9 @@ public class StudyRecordService {
 
         // 실시간 카운트를 기반으로 총 문제 수와 정답 수 설정
         int actualQuestions = session.getTotalCurrentQuestions();
+        int actualCorrect = session.getCurrentCorrectCount();
         session.setTotalQuestions(actualQuestions);
-        session.setCorrectAnswers(session.getCurrentCorrectCount());
+        session.setCorrectAnswers(actualCorrect);
 
         studySessionRepository.save(session);
 
@@ -187,11 +190,11 @@ public class StudyRecordService {
                 sessionId, studyTimeSeconds, session.getCurrentCorrectCount(),
                 session.getCurrentIncorrectCount());
 
-        // 학습한 문제가 있으면 StudyRecord에 저장
+        // 학습한 문제가 있으면 StudyRecord에 저장 (정답 수 포함)
         if (actualQuestions > 0) {
             try {
                 saveStudyRecord(session.getUserId(), session.getLevelName(), session.getPartOfSpeech(),
-                        actualQuestions, (int) studyTimeSeconds,
+                        actualQuestions, actualCorrect, (int) studyTimeSeconds,
                         convertStudyType(session.getStudyType()));
                 logger.info("강제 종료 시 StudyRecord 저장 완료 - 사용자 ID: {}, 학습 시간: {}초, 정답: {}, 오답: {}",
                         session.getUserId(), studyTimeSeconds, session.getCurrentCorrectCount(),
@@ -203,10 +206,11 @@ public class StudyRecordService {
     }
 
     /**
-     * 학습 기록 저장 (StudyRecord entity에 맞게 wordCount와 studyTime만 누적)
+     * 학습 기록 저장 (wordCount, correctCount, studyTime 누적)
      */
     private void saveStudyRecord(Long userId, String levelName, String partOfSpeech,
-                                 int wordCount, int studyTimeSeconds, StudyRecord.StudyType studyType) {
+                                 int wordCount, int correctCount, int studyTimeSeconds,
+                                 StudyRecord.StudyType studyType) {
         LocalDate today = LocalDate.now();
 
         // 오늘 같은 조건의 기록이 있는지 확인
@@ -222,10 +226,12 @@ public class StudyRecordService {
             // 기존 기록에 누적
             StudyRecord record = existingRecord.get();
             record.setWordCount(record.getWordCount() + wordCount);
-            record.setStudyTime(record.getStudyTime() + studyTimeSeconds); // 초 단위로 누적
+            int prevCorrect = record.getCorrectCount() != null ? record.getCorrectCount() : 0;
+            record.setCorrectCount(prevCorrect + correctCount);
+            record.setStudyTime(record.getStudyTime() + studyTimeSeconds);
             studyRecordRepository.save(record);
-            logger.info("기존 학습 기록 업데이트 - 사용자: {}, 추가 시간: {}초, 총 시간: {}초",
-                    userId, studyTimeSeconds, record.getStudyTime());
+            logger.info("기존 학습 기록 업데이트 - 사용자: {}, 추가 시간: {}초, 총 시간: {}초, 총 정답: {}/{}",
+                    userId, studyTimeSeconds, record.getStudyTime(), record.getCorrectCount(), record.getWordCount());
         } else {
             // 새로운 기록 생성
             StudyRecord newRecord = StudyRecord.builder()
@@ -233,15 +239,16 @@ public class StudyRecordService {
                     .levelName(levelName)
                     .partOfSpeech(partOfSpeech)
                     .wordCount(wordCount)
-                    .studyTime(studyTimeSeconds) // 초 단위로 저장
+                    .correctCount(correctCount)
+                    .studyTime(studyTimeSeconds)
                     .studyDate(today)
                     .studyType(studyType)
                     .build();
             studyRecordRepository.save(newRecord);
-            logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초", userId, studyTimeSeconds);
+            logger.info("새로운 학습 기록 생성 - 사용자: {}, 학습 시간: {}초, 정답: {}/{}",
+                    userId, studyTimeSeconds, correctCount, wordCount);
         }
     }
-
 
     /**
      * 사용자의 학습 기록 조회
@@ -255,7 +262,7 @@ public class StudyRecordService {
     }
 
     /**
-     * 단어별 학습 결과 기록
+     * 단어별 학습 결과 기록 (누적 오답 횟수 포함)
      */
     public void recordWordResult(Long userId, Long wordId, boolean isCorrect,
                                  WordStudyResult.StudyType studyType) {
@@ -270,6 +277,10 @@ public class StudyRecordService {
             WordStudyResult result = existingResult.get();
             result.setIsCorrect(isCorrect);
             result.setAttemptCount(result.getAttemptCount() + 1);
+            if (!isCorrect) {
+                int prevIncorrect = result.getIncorrectCount() != null ? result.getIncorrectCount() : 0;
+                result.setIncorrectCount(prevIncorrect + 1);
+            }
             result.setLastStudiedAt(LocalDateTime.now());
             wordStudyResultRepository.save(result);
         } else {
@@ -280,6 +291,7 @@ public class StudyRecordService {
                     .studyType(studyType)
                     .isCorrect(isCorrect)
                     .attemptCount(1)
+                    .incorrectCount(isCorrect ? 0 : 1)
                     .lastStudiedAt(LocalDateTime.now())
                     .build();
             wordStudyResultRepository.save(newResult);
@@ -287,7 +299,20 @@ public class StudyRecordService {
     }
 
     /**
-     * 틀린 단어 목록 조회
+     * 사용자별 단어 ID -> 누적 오답 횟수 맵 조회
+     */
+    public Map<Long, Integer> getIncorrectCountMap(Long userId, WordStudyResult.StudyType studyType) {
+        List<WordStudyResult> results = wordStudyResultRepository.findByUserIdAndStudyType(userId, studyType);
+        Map<Long, Integer> countMap = new HashMap<>();
+        for (WordStudyResult r : results) {
+            int count = r.getIncorrectCount() != null ? r.getIncorrectCount() : 0;
+            countMap.put(r.getWordId(), count);
+        }
+        return countMap;
+    }
+
+    /**
+     * 틀린 단어 목록 조회 (누적 오답 횟수 포함)
      */
     public List<WordDto> getIncorrectWords(Long userId, String levelName, String partOfSpeech,
                                            WordStudyResult.StudyType studyType) {
@@ -300,7 +325,10 @@ public class StudyRecordService {
         return incorrectResults.stream()
                 .map(result -> {
                     Word word = wordRepository.findWordWithFormsById(result.getWordId());
-                    return word != null ? new WordDto(word) : null;
+                    if (word == null) return null;
+                    WordDto dto = new WordDto(word);
+                    dto.setIncorrectCount(result.getIncorrectCount() != null ? result.getIncorrectCount() : 0);
+                    return dto;
                 })
                 .filter(wordDto -> wordDto != null)
                 .collect(Collectors.toList());
@@ -332,8 +360,9 @@ public class StudyRecordService {
                 .levelName(record.getLevelName())
                 .partOfSpeech(record.getPartOfSpeech())
                 .wordCount(record.getWordCount())
-                .studyTime(record.getStudyTime()) // 초 단위
-                .studyDuration(record.getFormattedStudyTime()) // 포맷팅된 시간 문자열
+                .correctCount(record.getCorrectCount() != null ? record.getCorrectCount() : 0)
+                .studyTime(record.getStudyTime())
+                .studyDuration(record.getFormattedStudyTime())
                 .build();
     }
 
