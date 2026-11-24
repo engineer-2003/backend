@@ -1,5 +1,4 @@
-// ChatController.java
-
+// backend/controller/ChatController.java
 package com.engineer_2003.backend.controller;
 
 import com.engineer_2003.backend.entity.StudyRecord;
@@ -107,11 +106,14 @@ public class ChatController {
             userContent.setRole("user");
             userContent.setParts(List.of(userPart));
 
-            String aiReply = callGeminiApi(systemPrompt, List.of(userContent));
+            String aiReply = callGeminiApi(
+                    systemPrompt,
+                    List.of(userContent));
 
             return new ChatResponse(aiReply);
 
         } catch (Exception e) {
+
             System.err.println(
                     "초기 챗봇 인사 생성 오류: " + e.getMessage());
 
@@ -152,7 +154,6 @@ public class ChatController {
                             ? "model"
                             : "user";
 
-                    // 첫 번째 메시지가 봇의 인사말이면 별도로 보관
                     if (contents.isEmpty()
                             && "model".equals(role)) {
 
@@ -203,11 +204,14 @@ public class ChatController {
 
                 } else if ("user".equals(contents.get(0).getRole())) {
 
-                    String originalText = contents.get(0).getParts()
-                            .get(0).getText();
+                    String originalText = contents.get(0)
+                            .getParts()
+                            .get(0)
+                            .getText();
 
                     contents.get(0).getParts()
-                            .get(0).setText(
+                            .get(0)
+                            .setText(
                                     "[이전 챗봇의 첫 번째 출제 내용]\n" +
                                             initialBotMessage +
                                             "\n\n[사용자의 답변]\n" +
@@ -225,7 +229,9 @@ public class ChatController {
 
             contents.add(currentContent);
 
-            String aiReply = callGeminiApi(systemPrompt, contents);
+            String aiReply = callGeminiApi(
+                    systemPrompt,
+                    contents);
 
             return new ChatResponse(aiReply);
 
@@ -241,7 +247,9 @@ public class ChatController {
     }
 
     /**
-     * 최근 7일간의 학습 기록을 바탕으로 AI 주간 요약 코멘트 생성
+     * 최근 7일간의 실제 학습 기록을 분석하여 AI 주간 요약 생성
+     *
+     * 분석 기간: 오늘을 포함한 최근 7일
      */
     @GetMapping("/weekly-summary")
     public ResponseEntity<WeeklySummaryResponse> getWeeklySummary(
@@ -255,28 +263,30 @@ public class ChatController {
             LocalDate today = LocalDate.now();
             LocalDate sevenDaysAgo = today.minusDays(6);
 
+            // 오늘을 포함한 최근 7일 기록만 필터링
             List<StudyRecord> recentRecords = allRecords.stream()
                     .filter(r -> r.getStudyDate() != null
                             && !r.getStudyDate().isBefore(sevenDaysAgo)
                             && !r.getStudyDate().isAfter(today))
+                    .sorted((a, b) -> b.getStudyDate().compareTo(a.getStudyDate()))
                     .collect(Collectors.toList());
 
+            // 최근 7일 학습 기록이 없는 경우
             if (recentRecords.isEmpty()) {
-                return ResponseEntity.ok(createEmptyWeeklySummary());
+                return ResponseEntity.ok(
+                        createEmptyWeeklySummary());
             }
 
-            StringBuilder sb = new StringBuilder();
+            int totalWords = 0;
+            int totalCorrect = 0;
+            int totalStudyTime = 0;
 
+            Set<LocalDate> activeDates = new HashSet<>();
+
+            StringBuilder recordsText = new StringBuilder();
+
+            // 날짜별 학습 데이터 정리
             for (StudyRecord r : recentRecords) {
-
-                String dayOfWeek = r.getStudyDate().getDayOfWeek()
-                        .getDisplayName(
-                                TextStyle.SHORT,
-                                Locale.KOREAN);
-
-                String typeLabel = r.getStudyType() == StudyRecord.StudyType.CONJUGATION
-                        ? "활용형 학습"
-                        : "예문 학습";
 
                 int wordCount = r.getWordCount() != null
                         ? r.getWordCount()
@@ -286,17 +296,35 @@ public class ChatController {
                         ? r.getCorrectCount()
                         : 0;
 
-                int accuracy = wordCount > 0
-                        ? (int) Math.round(
-                                (correctCount * 100.0) / wordCount)
-                        : 0;
-
                 int studyTime = r.getStudyTime() != null
                         ? r.getStudyTime()
                         : 0;
 
-                sb.append(String.format(
-                        "- %s(%s요일) | 급수: %s | 품사: %s | 유형: %s | 단어: %d개 | 정답: %d개 (정답률 %d%%) | 학습시간: %d초\n",
+                int accuracy = wordCount > 0
+                        ? (int) Math.round(
+                                correctCount * 100.0 / wordCount)
+                        : 0;
+
+                String dayOfWeek = r.getStudyDate()
+                        .getDayOfWeek()
+                        .getDisplayName(
+                                TextStyle.SHORT,
+                                Locale.KOREAN);
+
+                String typeLabel = r.getStudyType() == StudyRecord.StudyType.CONJUGATION
+                        ? "활용형 학습"
+                        : "예문 학습";
+
+                totalWords += wordCount;
+                totalCorrect += correctCount;
+                totalStudyTime += studyTime;
+
+                if (wordCount > 0) {
+                    activeDates.add(r.getStudyDate());
+                }
+
+                recordsText.append(String.format(
+                        "- 날짜: %s (%s요일) | 급수: %s | 품사: %s | 유형: %s | 학습 단어: %d개 | 정답: %d개 | 정답률: %d%% | 학습 시간: %d초\n",
                         r.getStudyDate(),
                         dayOfWeek,
                         r.getLevelName(),
@@ -308,26 +336,62 @@ public class ChatController {
                         studyTime));
             }
 
-            String systemPrompt = "당신은 한국인 일본어 학습자의 최근 7일 학습 데이터를 분석해 따뜻하고 구체적인 주간 리포트를 작성하는 AI 튜터입니다.\n" +
-                    "반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록, 이모지, 마크다운 기호를 포함하지 마세요.\n" +
+            int overallAccuracy = totalWords > 0
+                    ? (int) Math.round(
+                            totalCorrect * 100.0 / totalWords)
+                    : 0;
+
+            // Gemini 시스템 프롬프트
+            String systemPrompt = "당신은 한국인 일본어 학습자를 위한 학습 데이터 분석 AI 튜터입니다.\n" +
+                    "사용자가 제공한 최근 7일의 실제 학습 기록만을 근거로 주간 리포트를 작성하세요.\n\n" +
+
+                    "[분석 원칙]\n" +
+                    "1. 제공된 학습 기록에 없는 사실을 추측하거나 만들어내지 마세요.\n" +
+                    "2. 학습 기록이 적다면 분석 가능한 범위만 언급하세요.\n" +
+                    "3. 정답률이 낮다는 이유만으로 특정 문법이나 단어를 어려워한다고 단정하지 마세요.\n" +
+                    "4. 학습 시간이 길다는 사실만으로 집중력이 높다고 평가하지 마세요.\n" +
+                    "5. 학습 일수, 학습량, 정답률, 학습 시간의 실제 수치를 활용하세요.\n" +
+                    "6. 요일별 차이를 비교할 때는 실제 기록이 있는 요일만 비교하세요.\n" +
+                    "7. 학습 유형과 품사의 기록을 참고하되, 데이터가 충분하지 않으면 관련 분석을 생략하세요.\n" +
+                    "8. 전체 평균 정답률과 요일별 정답률을 혼동하지 마세요.\n" +
+                    "9. 사용자를 평가하거나 압박하지 말고 현실적인 학습 방향을 제안하세요.\n\n" +
+
+                    "[출력 형식]\n" +
+                    "반드시 아래 JSON 형식으로만 응답하세요.\n" +
+                    "마크다운 코드블록이나 JSON 이외의 설명은 작성하지 마세요.\n" +
                     "{\n" +
-                    "  \"headline\": \"한 줄 요약 제목 (25자 이내, 해요체)\",\n" +
-                    "  \"comment\": \"최근 7일간의 학습 일수, 요일별 패턴, 정답률과 학습 시간 특징을 담은 2~3문장 총평 (해요체)\",\n" +
+                    "  \"headline\": \"25자 이내의 한 줄 제목\",\n" +
+                    "  \"comment\": \"최근 7일의 학습 일수, 학습량, 정답률, 학습 시간 등을 종합한 2~3문장 총평\",\n" +
                     "  \"points\": [\n" +
-                    "    { \"icon\": \"trend\", \"title\": \"강점\", \"text\": \"데이터에서 드러난 잘한 점 1~2문장 (해요체)\" },\n" +
-                    "    { \"icon\": \"target\", \"title\": \"보완할 점\", \"text\": \"정답률이 낮았거나 복습이 필요한 요일·품사·유형에 대한 구체적 조언 1~2문장 (해요체)\" },\n"
-                    +
-                    "    { \"icon\": \"bulb\", \"title\": \"다음 주 추천\", \"text\": \"최근 학습한 급수·품사를 바탕으로 한 다음 주 실천 목표 제안 1~2문장 (해요체)\" }\n"
-                    +
+                    "    { \"icon\": \"trend\", \"title\": \"강점\", \"text\": \"실제 기록에서 드러난 긍정적인 학습 패턴\" },\n" +
+                    "    { \"icon\": \"target\", \"title\": \"보완할 점\", \"text\": \"실제 기록에 근거한 복습 또는 개선 제안\" },\n" +
+                    "    { \"icon\": \"bulb\", \"title\": \"다음 주 추천\", \"text\": \"최근 학습 기록을 바탕으로 한 실천 가능한 목표\" }\n" +
                     "  ]\n" +
-                    "}";
+                    "}\n\n" +
+
+                    "[문체]\n" +
+                    "1. 자연스러운 한국어 해요체를 사용하세요.\n" +
+                    "2. 친근하지만 과장된 칭찬은 피하세요.\n" +
+                    "3. 각 항목은 1~2문장으로 간결하게 작성하세요.\n" +
+                    "4. 데이터에 근거가 없는 강점이나 약점을 억지로 만들지 마세요.\n";
+
+            // Gemini에 전달할 실제 데이터
+            String userPrompt = "[분석 기간]\n" +
+                    sevenDaysAgo + "부터 " + today + "까지\n\n" +
+
+                    "[최근 7일 요약 통계]\n" +
+                    "- 학습한 날짜 수: " + activeDates.size() + "일\n" +
+                    "- 총 학습 단어 수: " + totalWords + "개\n" +
+                    "- 총 정답 수: " + totalCorrect + "개\n" +
+                    "- 전체 정답률: " + overallAccuracy + "%\n" +
+                    "- 총 학습 시간: " + totalStudyTime + "초\n\n" +
+
+                    "[날짜별 학습 기록]\n" +
+                    recordsText +
+                    "\n위 데이터만을 근거로 주간 학습 리포트를 작성하세요.";
 
             Part userPart = new Part();
-
-            userPart.setText(
-                    "[최근 7일 학습 기록]\n" +
-                            sb +
-                            "\n위 데이터를 분석해 JSON 형식의 주간 요약 코멘트를 작성해주세요.");
+            userPart.setText(userPrompt);
 
             Content userContent = new Content();
             userContent.setRole("user");
@@ -337,6 +401,7 @@ public class ChatController {
                     systemPrompt,
                     List.of(userContent));
 
+            // Gemini 응답에서 JSON 코드블록 제거
             String cleanedJson = rawReply.trim();
 
             if (cleanedJson.startsWith("```")) {
@@ -350,6 +415,8 @@ public class ChatController {
                     cleanedJson,
                     WeeklySummaryResponse.class);
 
+            validateWeeklySummary(summary);
+
             return ResponseEntity.ok(summary);
 
         } catch (Exception e) {
@@ -361,6 +428,48 @@ public class ChatController {
         }
     }
 
+    /**
+     * AI 주간 요약 응답 검증
+     */
+    private void validateWeeklySummary(
+            WeeklySummaryResponse summary) {
+
+        if (summary == null
+                || summary.getHeadline() == null
+                || summary.getHeadline().isBlank()
+                || summary.getComment() == null
+                || summary.getComment().isBlank()
+                || summary.getPoints() == null
+                || summary.getPoints().size() != 3) {
+
+            throw new IllegalStateException(
+                    "AI 주간 요약 응답 형식이 올바르지 않습니다.");
+        }
+
+        Set<String> requiredIcons = Set.of(
+                "trend",
+                "target",
+                "bulb");
+
+        for (SummaryPointDto point : summary.getPoints()) {
+
+            if (point == null
+                    || point.getIcon() == null
+                    || !requiredIcons.contains(point.getIcon())
+                    || point.getTitle() == null
+                    || point.getTitle().isBlank()
+                    || point.getText() == null
+                    || point.getText().isBlank()) {
+
+                throw new IllegalStateException(
+                        "AI 주간 요약 세부 항목이 올바르지 않습니다.");
+            }
+        }
+    }
+
+    /**
+     * 최근 7일 학습 기록이 없는 경우 반환하는 안내
+     */
     private WeeklySummaryResponse createEmptyWeeklySummary() {
 
         WeeklySummaryResponse res = new WeeklySummaryResponse();
@@ -375,15 +484,15 @@ public class ChatController {
                 new SummaryPointDto(
                         "trend",
                         "강점",
-                        "꾸준한 학습 기록이 쌓이면 강점 요일을 분석해드려요."),
+                        "학습 기록이 쌓이면 학습 패턴을 분석해드려요."),
                 new SummaryPointDto(
                         "target",
                         "보완할 점",
-                        "정답률이 낮은 요일의 단어를 복습 퀴즈로 다시 확인해보세요."),
+                        "먼저 학습을 진행하고 나만의 학습 데이터를 만들어보세요."),
                 new SummaryPointDto(
                         "bulb",
                         "다음 주 추천",
-                        "하루 15문제씩 목표를 설정하고 연속 학습일을 늘려보세요.")));
+                        "하루에 조금씩 일본어 단어 학습을 이어가보세요.")));
 
         return res;
     }
@@ -680,6 +789,9 @@ public class ChatController {
                 "사용 가능한 Gemini 모델이 없습니다.");
     }
 
+    /**
+     * Gemini 응답 텍스트 추출
+     */
     private String extractReplyText(GeminiResponse body) {
 
         if (body == null
@@ -701,7 +813,9 @@ public class ChatController {
                 .getText();
     }
 
-    // --- DTOs ---
+    // --------------------------------------------------
+    // DTOs
+    // --------------------------------------------------
 
     static class ChatRequest {
 
@@ -848,7 +962,9 @@ public class ChatController {
             return system_instruction;
         }
 
-        public void setSystemInstruction(Content systemInstruction) {
+        public void setSystemInstruction(
+                Content systemInstruction) {
+
             this.system_instruction = systemInstruction;
         }
 
