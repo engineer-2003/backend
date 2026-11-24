@@ -2,7 +2,6 @@
 package com.engineer_2003.backend.controller;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,7 +14,6 @@ import com.engineer_2003.backend.service.UserService;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"})
 public class UserController {
 
     private final UserService userService;
@@ -53,14 +51,14 @@ public class UserController {
         }
         return ResponseEntity.ok(token);
     }
-    
+
     // 비밀번호 찾기
     @PostMapping("/find-password")
     public ResponseEntity<Void> findPassword(@RequestBody UserRegistrationDto userDto) {
         userService.findPassword(userDto.getUsername(), userDto.getEmail());
         return ResponseEntity.ok().build();
     }
-    
+
     // 비밀번호 재설정
     @PostMapping("/reset-password")
     public ResponseEntity<Void> resetPassword(@RequestBody PasswordResetDto resetDto) {
