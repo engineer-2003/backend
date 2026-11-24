@@ -1,3 +1,4 @@
+// JwtAuthenticationFilter.java
 package com.engineer_2003.backend.security.jwt;
 
 import java.io.IOException;
@@ -19,21 +20,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain)
             throws ServletException, IOException {
+
         String token = resolveToken(request);
-        if (token != null && jwtTokenProvider.validateToken(token)) {
-            // 토큰이 유효하면 SecurityContext에 인증 정보 저장
-            SecurityContextHolder.getContext().setAuthentication(jwtTokenProvider.getAuthentication(token));
+        String requestUri = request.getRequestURI();
+
+        if (token == null) {
+            System.out.println("[JWT] 토큰 없음: " + requestUri);
+
+        } else if (jwtTokenProvider.validateToken(token)) {
+            SecurityContextHolder.getContext()
+                    .setAuthentication(jwtTokenProvider.getAuthentication(token));
+
+            System.out.println("[JWT] 인증 성공: " + requestUri);
+
+        } else {
+            System.out.println("[JWT] 토큰 검증 실패: " + requestUri);
         }
+
         filterChain.doFilter(request, response);
     }
 
     private String resolveToken(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
+
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7); 
+            return bearerToken.substring(7);
         }
+
         return null;
     }
 }
