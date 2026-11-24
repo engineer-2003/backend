@@ -20,7 +20,11 @@ public class UserService {
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailService emailService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider, EmailService emailService) {
+    public UserService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -34,10 +38,14 @@ public class UserService {
             throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
         }
 
+        if (userRepository.existsByEmail(userDto.getEmail())) {
+            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+        }
+
         User user = User.builder()
                 .username(userDto.getUsername())
-                .password(passwordEncoder.encode(userDto.getPassword())) // 비밀번호 암호화
-                .email(userDto.getEmail()) // 이메일 필드 추가
+                .password(passwordEncoder.encode(userDto.getPassword()))
+                .email(userDto.getEmail())
                 .build();
 
         userRepository.save(user);
@@ -46,27 +54,34 @@ public class UserService {
     // Google 로그인 처리
     @Transactional
     public String processGoogleLogin(String email) {
-        User user = userRepository.findByEmailAndProvider(email, "google");
+        // 이메일 기준으로 기존 사용자 조회
+        User user = userRepository.findByEmail(email);
 
-        if (user == null) {
-            // 구글 정보로 신규 회원 생성
-            // username은 유니크해야 하므로 이메일 앞부분과 랜덤 문자열을 조합
-            String username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
+        if (user != null) {
+            // 다른 로그인 방식으로 가입된 계정인지 확인
+            if (user.getProvider() != null
+                    && !user.getProvider().equalsIgnoreCase("google")) {
+                throw new IllegalArgumentException(
+                        "이미 다른 로그인 방식으로 가입된 이메일입니다.");
+            }
+        } else {
+            // 신규 Google 사용자 생성
+            String username = email.split("@")[0] + "_"
+                    + UUID.randomUUID().toString().substring(0, 4);
 
-            // 이미 해당 username이 존재할 경우를 대비한 예외 처리 (선택사항)
             while (userRepository.existsByUsername(username)) {
-                username = email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 4);
+                username = email.split("@")[0] + "_"
+                        + UUID.randomUUID().toString().substring(0, 4);
             }
 
             User newUser = User.builder()
                     .username(username)
                     .email(email)
-                    // 소셜 로그인이므로 비밀번호는 랜덤 값으로 채움
                     .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                     .provider("google")
                     .build();
-            userRepository.save(newUser);
-            user = newUser;
+
+            user = userRepository.save(newUser);
         }
 
         // JWT 토큰 생성 및 반환
@@ -77,6 +92,7 @@ public class UserService {
     @Transactional
     public void findPassword(String username, String email) {
         User user = userRepository.findByUsernameAndEmail(username, email);
+
         if (user == null) {
             throw new IllegalArgumentException("아이디 또는 이메일이 잘못되었습니다.");
         }
@@ -85,31 +101,32 @@ public class UserService {
         user.setResetToken(resetToken);
         userRepository.save(user);
 
-        String resetLink = "http://localhost:5173/user/reset-password?token=" + resetToken; // 프론트엔드 경로 업데이트
+        String resetLink = "http://localhost:5173/user/reset-password?token=" + resetToken;
         emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
     }
 
     // 비밀번호 재설정 기능 (새 비밀번호 저장)
     @Transactional
     public void resetPassword(String token, String newPassword) {
-        // 1. 토큰으로 사용자 찾기
         User user = userRepository.findByResetToken(token);
+
         if (user == null) {
             throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
         }
 
-        // 2. 비밀번호 재설정
         user.setPassword(passwordEncoder.encode(newPassword));
-        user.setResetToken(null); // 사용된 토큰은 무효화
+        user.setResetToken(null);
         userRepository.save(user);
     }
 
     // 로그인
     public String login(String username, String password) {
         User user = userRepository.findByUsername(username);
-        if (user != null && passwordEncoder.matches(password, user.getPassword())) { // 암호화된 비밀번호 대조
-            return jwtTokenProvider.generateToken(username); // JWT 토큰 생성
+
+        if (user != null && passwordEncoder.matches(password, user.getPassword())) {
+            return jwtTokenProvider.generateToken(username);
         }
+
         return null;
     }
 
@@ -118,12 +135,14 @@ public class UserService {
         return userRepository.findByUsername(username);
     }
 
-    // 사용자명으로 사용자 ID 조회 (AuthUtils와 별개로 내부 서비스에서 사용)
+    // 사용자명으로 사용자 ID 조회
     public Long getUserIdByUsername(String username) {
         User user = userRepository.findByUsername(username);
+
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username);
         }
-        return user.getUserId(); // User 엔티티의 ID getter 메서드
+
+        return user.getUserId();
     }
 }
