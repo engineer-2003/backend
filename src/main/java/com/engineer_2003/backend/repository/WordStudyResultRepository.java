@@ -2,6 +2,7 @@
 package com.engineer_2003.backend.repository;
 
 import com.engineer_2003.backend.entity.WordStudyResult;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,13 +12,17 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface WordStudyResultRepository extends JpaRepository<WordStudyResult, Long> {
+public interface WordStudyResultRepository
+                extends JpaRepository<WordStudyResult, Long> {
 
         Optional<WordStudyResult> findByUserIdAndWordIdAndStudyType(
-                        Long userId, Long wordId, WordStudyResult.StudyType studyType);
+                        Long userId,
+                        Long wordId,
+                        WordStudyResult.StudyType studyType);
 
         List<WordStudyResult> findByUserIdAndStudyType(
-                        Long userId, WordStudyResult.StudyType studyType);
+                        Long userId,
+                        WordStudyResult.StudyType studyType);
 
         @Query("SELECT wsr FROM WordStudyResult wsr " +
                         "JOIN FETCH wsr.word w " +
@@ -48,9 +53,42 @@ public interface WordStudyResultRepository extends JpaRepository<WordStudyResult
         List<WordStudyResult> findByUserIdAndIsCorrectFalse(Long userId);
 
         /**
-         * 사용자가 실제로 학습한 단어 목록 조회
-         * Word를 JOIN FETCH하여 LazyInitializationException 방지
-         * 최근 학습한 단어부터 정렬
+         * 사용자가 실제로 학습한 단어 수
+         */
+        @Query("SELECT COUNT(DISTINCT wsr.word.id) " +
+                        "FROM WordStudyResult wsr " +
+                        "WHERE wsr.userId = :userId")
+        Long countDistinctWordsByUserId(
+                        @Param("userId") Long userId);
+
+        /**
+         * 사용자가 특정 급수에서 학습한 단어 수
+         */
+        @Query("SELECT COUNT(DISTINCT wsr.word.id) " +
+                        "FROM WordStudyResult wsr " +
+                        "JOIN wsr.word w " +
+                        "WHERE wsr.userId = :userId " +
+                        "AND w.levelName = :level")
+        Long countDistinctWordsByUserIdAndLevel(
+                        @Param("userId") Long userId,
+                        @Param("level") String level);
+
+        /**
+         * 사용자가 특정 급수와 품사에서 학습한 단어 수
+         */
+        @Query("SELECT COUNT(DISTINCT wsr.word.id) " +
+                        "FROM WordStudyResult wsr " +
+                        "JOIN wsr.word w " +
+                        "WHERE wsr.userId = :userId " +
+                        "AND w.levelName = :level " +
+                        "AND w.partOfSpeech = :part")
+        Long countDistinctWordsByUserIdAndLevelAndPart(
+                        @Param("userId") Long userId,
+                        @Param("level") String level,
+                        @Param("part") String part);
+
+        /**
+         * 최근 학습한 단어 조회
          */
         @Query("SELECT wsr FROM WordStudyResult wsr " +
                         "JOIN FETCH wsr.word w " +

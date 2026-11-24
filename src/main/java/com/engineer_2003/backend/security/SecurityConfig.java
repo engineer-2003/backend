@@ -47,7 +47,7 @@ public class SecurityConfig {
                         .requestMatchers("/study", "/study/{id}", "/study/{id}/sentence-problem",
                                 "/study/{id}/form-problem", "/study/{id}/check")
                         .permitAll()
-                        .requestMatchers("/api/chat").permitAll()
+                        .requestMatchers("/api/chat/**").authenticated()
                         .requestMatchers(
                                 "/study/incorrect/**",
                                 "/study/session/**",
