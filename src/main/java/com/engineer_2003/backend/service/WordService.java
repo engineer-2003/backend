@@ -1,4 +1,5 @@
 // WordService.java
+
 package com.engineer_2003.backend.service;
 
 import com.engineer_2003.backend.dto.WordDto;
@@ -13,8 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.text.Normalizer;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,19 +33,23 @@ public class WordService {
     public List<WordDto> getWordsByLevelAndPart(
             String levelName, String partOfSpeech) {
 
-        logger.debug("단어 조회 시작 - 레벨: {}, 품사: {}",
+        logger.info(
+                "단어 조회 시작 - 레벨: {}, 품사: {}",
                 levelName, partOfSpeech);
 
         try {
             List<Word> words = wordRepository.findWordsWithFormsbyLevelAndPart(
                     levelName, partOfSpeech);
 
+            logger.info("Repository 반환 단어 수: {}", words.size());
+
             List<WordDto> wordDtos = words.stream()
                     .map(word -> {
                         try {
                             return new WordDto(word);
                         } catch (Exception e) {
-                            logger.warn("WordDto 변환 실패 - ID: {}",
+                            logger.warn(
+                                    "WordDto 변환 실패 - ID: {}",
                                     word.getId(), e);
                             return null;
                         }
@@ -60,7 +63,6 @@ public class WordService {
                                     && dto.getForms().values().stream()
                                             .anyMatch(this::isValidForm);
                         }
-
                         return true;
                     })
                     .collect(Collectors.toList());
@@ -128,7 +130,8 @@ public class WordService {
 
             problem.put("blankSentence", blankSentence);
 
-            problem.put("correctAnswers",
+            problem.put(
+                    "correctAnswers",
                     Arrays.asList(word.getWord(), word.getReading()));
 
             problem.put("hint", getHint(word.getReading()));
@@ -142,8 +145,11 @@ public class WordService {
     }
 
     /**
-     * 예문에 실제 등장하는 활용형을 자동으로 찾아
-     * 그중 하나를 무작위로 출제합니다.
+     * 활용형 문제 생성
+     *
+     * 1. 예문에 활용형이 있으면 해당 활용형을 빈칸으로 만듭니다.
+     * 2. 예문에 활용형이 없으면 기본형을 빈칸으로 만듭니다.
+     * 3. 정답은 DB에 저장된 활용형에서 가져옵니다.
      */
     public Map<String, Object> generateFormProblem(Long wordId) {
 
@@ -173,7 +179,6 @@ public class WordService {
             }
 
             WordDto wordDto = new WordDto(word);
-
             Map<String, String> forms = wordDto.getForms();
 
             if (forms == null || forms.isEmpty()) {
@@ -181,48 +186,91 @@ public class WordService {
                 return null;
             }
 
-            /*
-             * 예문에 실제로 등장하는 활용형 검색
-             */
-            List<FormOccurrence> occurrences = findFormOccurrences(exampleSentence, forms);
+            // 유효한 활용형만 추출
+            Map<String, String> validForms = forms.entrySet()
+                    .stream()
+                    .filter(entry -> entry.getKey() != null
+                            && isValidForm(entry.getValue()))
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            Map.Entry::getValue,
+                            (a, b) -> a,
+                            LinkedHashMap::new));
 
-            if (occurrences.isEmpty()) {
-
-                logger.info(
-                        "예문에 실제 활용형이 없음 - ID: {}, 단어: {}",
-                        wordId, word.getWord());
-
+            if (validForms.isEmpty()) {
+                logger.info("유효한 활용형 없음 - ID: {}", wordId);
                 return null;
             }
 
-            /*
-             * 동일한 위치에 여러 형태가 매칭되는 경우
-             * 더 긴 형태를 우선합니다.
-             *
-             * 서로 다른 위치에 등장하는 활용형은
-             * 모두 무작위 선택 대상에 포함합니다.
-             */
-            int maxLength = occurrences.stream()
-                    .mapToInt(FormOccurrence::getLength)
-                    .max()
-                    .orElse(0);
+            String selectedFormType;
+            String correctAnswer;
+            String blankSentence;
+            String matchedText;
 
-            List<FormOccurrence> candidates = occurrences.stream()
-                    .filter(o -> o.getLength() == maxLength)
-                    .collect(Collectors.toList());
+            // 1단계: 예문에서 실제 활용형 검색
+            List<FormOccurrence> occurrences = findFormOccurrences(exampleSentence, validForms);
 
-            FormOccurrence selected = candidates.get(
-                    random.nextInt(candidates.size()));
+            if (!occurrences.isEmpty()) {
 
-            String formType = selected.getFormType();
-            String correctAnswer = selected.getMatchedText();
+                int maxLength = occurrences.stream()
+                        .mapToInt(FormOccurrence::getLength)
+                        .max()
+                        .orElse(0);
 
-            /*
-             * 실제로 매칭된 문자열 부분만 빈칸으로 변경
-             */
-            String blankSentence = exampleSentence.substring(0, selected.getStart())
-                    + "（　）"
-                    + exampleSentence.substring(selected.getEnd());
+                List<FormOccurrence> candidates = occurrences.stream()
+                        .filter(o -> o.getLength() == maxLength)
+                        .collect(Collectors.toList());
+
+                FormOccurrence selected = candidates.get(
+                        random.nextInt(candidates.size()));
+
+                selectedFormType = selected.getFormType();
+                correctAnswer = selected.getMatchedText();
+                matchedText = selected.getMatchedText();
+
+                blankSentence = exampleSentence.substring(0, selected.getStart())
+                        + "（　）"
+                        + exampleSentence.substring(selected.getEnd());
+
+                logger.debug(
+                        "예문에서 활용형 발견 - ID: {}, 타입: {}",
+                        wordId, selectedFormType);
+
+            } else {
+
+                // 2단계: 활용형이 없으면 기본형을 찾아 빈칸 처리
+                logger.info(
+                        "예문에 활용형 없음. 기본형 fallback 실행 - ID: {}, 단어: {}",
+                        wordId, word.getWord());
+
+                List<String> availableFormTypes = new ArrayList<>(validForms.keySet());
+
+                selectedFormType = availableFormTypes.get(
+                        random.nextInt(availableFormTypes.size()));
+
+                correctAnswer = validForms.get(selectedFormType);
+
+                matchedText = findBaseWordInSentence(
+                        exampleSentence,
+                        word.getWord(),
+                        word.getReading());
+
+                if (matchedText == null) {
+                    logger.info(
+                            "예문에서 기본형도 찾지 못함 - ID: {}, 예문: {}",
+                            wordId, exampleSentence);
+                    return null;
+                }
+
+                blankSentence = replaceFirstExact(
+                        exampleSentence,
+                        matchedText,
+                        "（　）");
+
+                if (blankSentence.equals(exampleSentence)) {
+                    return null;
+                }
+            }
 
             Map<String, Object> problem = new HashMap<>();
 
@@ -234,22 +282,36 @@ public class WordService {
             problem.put("part", word.getPartOfSpeech());
             problem.put("level", word.getLevelName());
 
-            problem.put("formType", formType);
-            problem.put("formName", getFormDisplayName(formType));
+            problem.put("formType", selectedFormType);
+            problem.put("formName",
+                    getFormDisplayName(selectedFormType));
 
             problem.put("correctAnswer", correctAnswer);
 
             problem.put("blankSentence", blankSentence);
             problem.put("exampleSentence", exampleSentence);
 
-            problem.put("exampleTranslation",
+            problem.put(
+                    "exampleTranslation",
                     word.getExampleTranslation());
 
             problem.put("hint", getHint(correctAnswer));
 
+            // fallback 여부를 프론트에서도 확인할 수 있도록 전달
+            problem.put(
+                    "fallbackUsed",
+                    occurrences.isEmpty());
+
+            // 예문에서 실제로 빈칸 처리한 문자열
+            problem.put("matchedText", matchedText);
+
             logger.info(
-                    "활용형 문제 생성 성공 - ID: {}, 단어: {}, 타입: {}, 정답: {}",
-                    wordId, word.getWord(), formType, correctAnswer);
+                    "활용형 문제 생성 성공 - ID: {}, 단어: {}, 타입: {}, 정답: {}, fallback: {}",
+                    wordId,
+                    word.getWord(),
+                    selectedFormType,
+                    correctAnswer,
+                    occurrences.isEmpty());
 
             return problem;
 
@@ -260,14 +322,117 @@ public class WordService {
     }
 
     /**
-     * 예문에서 활용형이 등장하는 위치를 검색합니다.
-     *
-     * 괄호 표기 예시:
-     * 明(か)します -> 明かします
-     * 荒(ら)します -> 荒らします
-     *
-     * DB의 괄호는 표기상의 구분으로 취급하고
-     * 괄호 안의 문자는 실제 예문에서 필수로 검색합니다.
+     * 예문에서 기본형 검색
+     */
+    private String findBaseWordInSentence(
+            String sentence,
+            String word,
+            String reading) {
+
+        if (sentence == null) {
+            return null;
+        }
+
+        // 먼저 DB의 word 필드로 검색
+        if (word != null && !word.trim().isEmpty()) {
+
+            String found = findExactText(sentence, word);
+
+            if (found != null) {
+                return found;
+            }
+
+            // 괄호 표기가 있는 경우도 비교
+            found = findNormalizedText(sentence, word);
+
+            if (found != null) {
+                return found;
+            }
+        }
+
+        // word로 찾지 못하면 reading으로 검색
+        if (reading != null && !reading.trim().isEmpty()) {
+
+            String found = findExactText(sentence, reading);
+
+            if (found != null) {
+                return found;
+            }
+
+            found = findNormalizedText(sentence, reading);
+
+            if (found != null) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 원문에서 정확한 문자열 검색
+     */
+    private String findExactText(String sentence, String target) {
+
+        if (sentence == null || target == null || target.isEmpty()) {
+            return null;
+        }
+
+        return sentence.contains(target) ? target : null;
+    }
+
+    /**
+     * 괄호 등을 무시한 정규화 검색
+     * 검색된 문자열은 원문에서 실제 위치를 찾아 반환합니다.
+     */
+    private String findNormalizedText(String sentence, String target) {
+
+        String normalizedTarget = normalizeText(target);
+
+        if (normalizedTarget.isEmpty()) {
+            return null;
+        }
+
+        for (int start = 0; start < sentence.length(); start++) {
+
+            for (int end = start + 1; end <= sentence.length(); end++) {
+
+                String candidate = sentence.substring(start, end);
+
+                if (normalizeText(candidate).equals(normalizedTarget)) {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 문자열 첫 번째 일치 항목 치환
+     */
+    private String replaceFirstExact(
+            String sentence,
+            String target,
+            String replacement) {
+
+        if (sentence == null || target == null || target.isEmpty()) {
+            return sentence;
+        }
+
+        int index = sentence.indexOf(target);
+
+        if (index < 0) {
+            return sentence;
+        }
+
+        return sentence.substring(0, index)
+                + replacement
+                + sentence.substring(index + target.length());
+    }
+
+    /**
+     * 예문과 DB 활용형 비교
      */
     private List<FormOccurrence> findFormOccurrences(
             String sentence,
@@ -288,42 +453,37 @@ public class WordService {
                 continue;
             }
 
-            String regex = buildFormRegex(formValue);
+            String normalizedForm = normalizeText(formValue);
 
-            try {
-                Pattern pattern = Pattern.compile(regex);
-                Matcher matcher = pattern.matcher(sentence);
+            if (normalizedForm.isEmpty()) {
+                continue;
+            }
 
-                while (matcher.find()) {
+            int index = sentence.indexOf(formValue);
 
-                    String matchedText = matcher.group();
+            while (index >= 0) {
 
-                    if (!isValidForm(matchedText)) {
-                        continue;
-                    }
+                results.add(new FormOccurrence(
+                        formType,
+                        formValue,
+                        sentence.substring(
+                                index,
+                                index + formValue.length()),
+                        index,
+                        index + formValue.length()));
 
-                    results.add(new FormOccurrence(
-                            formType,
-                            formValue,
-                            matchedText,
-                            matcher.start(),
-                            matcher.end()));
-                }
-
-            } catch (Exception e) {
-                logger.warn("활용형 검색 실패 - 타입: {}, 형태: {}",
-                        formType, formValue, e);
+                index = sentence.indexOf(
+                        formValue,
+                        index + 1);
             }
         }
 
-        /*
-         * 같은 위치에 중복으로 매칭된 경우
-         * 긴 문자열을 우선하여 정리합니다.
-         */
+        // 긴 활용형 우선
         results.sort(
-                Comparator.comparingInt(FormOccurrence::getLength)
-                        .reversed());
+                Comparator.comparingInt(
+                        FormOccurrence::getLength).reversed());
 
+        // 겹치는 매칭 제거
         List<FormOccurrence> filtered = new ArrayList<>();
 
         for (FormOccurrence current : results) {
@@ -340,36 +500,20 @@ public class WordService {
     }
 
     /**
-     * DB의 괄호 표기를 검색 가능한 정규식으로 변환합니다.
-     *
-     * 明(か)します -> 明かします
-     *
-     * 괄호 자체는 검색하지 않고 내부 문자는 검색합니다.
+     * 비교용 정규화
      */
-    private String buildFormRegex(String form) {
+    private String normalizeText(String text) {
 
-        StringBuilder regex = new StringBuilder();
-
-        boolean insideParentheses = false;
-
-        for (int i = 0; i < form.length(); i++) {
-
-            char c = form.charAt(i);
-
-            if (c == '(' || c == '（') {
-                insideParentheses = true;
-                continue;
-            }
-
-            if (c == ')' || c == '）') {
-                insideParentheses = false;
-                continue;
-            }
-
-            regex.append(Pattern.quote(String.valueOf(c)));
+        if (text == null) {
+            return "";
         }
 
-        return regex.toString();
+        return Normalizer.normalize(
+                text,
+                Normalizer.Form.NFKC)
+                .replaceAll("[()（）]", "")
+                .replaceAll("\\s+", "")
+                .trim();
     }
 
     /**
@@ -383,9 +527,9 @@ public class WordService {
 
         String value = form.trim();
 
-        return !value.equals("null")
+        return !value.equalsIgnoreCase("null")
                 && !value.equals("-")
-                && !value.equals("NaN");
+                && !value.equalsIgnoreCase("NaN");
     }
 
     /**
@@ -464,11 +608,25 @@ public class WordService {
         formNames.put("adverbialForm", "부사형");
         formNames.put("nounForm", "명사형");
 
+        // 한국어 키
+        formNames.put("ます형", "ます형");
+        formNames.put("부정형", "부정형");
+        formNames.put("의지형", "의지형");
+        formNames.put("조건형", "조건형");
+        formNames.put("가정형", "가정형");
+        formNames.put("명령형", "명령형");
+        formNames.put("가능형", "가능형");
+        formNames.put("て형", "て형");
+        formNames.put("た형", "た형");
+        formNames.put("과거형", "과거형");
+        formNames.put("미연형", "미연형");
+        formNames.put("정중형", "정중형");
+
         return formNames.getOrDefault(formType, formType);
     }
 
     /**
-     * 기존 기본형 예문 학습
+     * 기본형 예문 학습
      */
     private String createBlankSentence(
             String sentence,
@@ -489,7 +647,8 @@ public class WordService {
                 && !reading.trim().isEmpty()
                 && !blankSentence.contains("（　）")) {
 
-            blankSentence = blankSentence.replace(reading, "（　）");
+            blankSentence = blankSentence.replace(
+                    reading, "（　）");
         }
 
         return blankSentence;
@@ -515,7 +674,9 @@ public class WordService {
      * 정답 확인
      */
     public boolean checkAnswer(
-            Long wordId, String answer, String formType) {
+            Long wordId,
+            String answer,
+            String formType) {
 
         try {
             Word word = wordRepository.findWordWithFormsById(wordId);
@@ -524,29 +685,61 @@ public class WordService {
                 return false;
             }
 
-            if ("word".equals(formType) || "원형".equals(formType)) {
+            if ("word".equals(formType)
+                    || "원형".equals(formType)) {
 
                 return Objects.equals(word.getWord(), answer)
                         || Objects.equals(word.getReading(), answer);
             }
 
             WordDto wordDto = new WordDto(word);
-
             Map<String, String> forms = wordDto.getForms();
 
-            if (forms == null || !forms.containsKey(formType)) {
+            if (forms == null) {
                 return false;
             }
 
             String correctAnswer = forms.get(formType);
 
-            return correctAnswer != null
-                    && correctAnswer.equals(answer);
+            if (!isValidForm(correctAnswer)) {
+                return false;
+            }
+
+            String normalizedCorrect = normalizeText(correctAnswer);
+            String normalizedAnswer = normalizeText(answer);
+
+            return normalizedCorrect.equals(normalizedAnswer)
+                    || convertKatakanaToHiragana(normalizedCorrect)
+                            .equals(convertKatakanaToHiragana(
+                                    normalizedAnswer));
 
         } catch (Exception e) {
             logger.error("정답 확인 오류 - ID: {}", wordId, e);
             return false;
         }
+    }
+
+    /**
+     * 가타카나를 히라가나로 변환
+     */
+    private String convertKatakanaToHiragana(String text) {
+
+        if (text == null) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+
+        for (char ch : text.toCharArray()) {
+
+            if (ch >= '\u30A1' && ch <= '\u30F6') {
+                result.append((char) (ch - 0x60));
+            } else {
+                result.append(ch);
+            }
+        }
+
+        return result.toString();
     }
 
     /**
@@ -561,19 +754,21 @@ public class WordService {
                 return "";
             }
 
-            if ("word".equals(formType) || "원형".equals(formType)) {
+            if ("word".equals(formType)
+                    || "원형".equals(formType)) {
                 return word.getWord();
             }
 
             WordDto wordDto = new WordDto(word);
-
             Map<String, String> forms = wordDto.getForms();
 
             if (forms == null) {
                 return "";
             }
 
-            return forms.getOrDefault(formType, "");
+            String answer = forms.get(formType);
+
+            return isValidForm(answer) ? answer : "";
 
         } catch (Exception e) {
             logger.error("정답 조회 오류 - ID: {}", wordId, e);
@@ -594,7 +789,6 @@ public class WordService {
             }
 
             WordDto wordDto = new WordDto(word);
-
             Map<String, String> forms = wordDto.getForms();
 
             if (forms == null) {
